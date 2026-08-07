@@ -52,10 +52,43 @@ public class Budget {
             return;
         }
 
+        apply(charge);
+    }
+
+    public synchronized boolean tryCharge(BudgetCharge charge) {
+        if (charge == null) {
+            return true;
+        }
+        if (!canApply(charge)) {
+            return false;
+        }
+
+        apply(charge);
+        return true;
+    }
+
+    public synchronized boolean tryChargeToolCall() {
+        return tryCharge(BudgetCharge.toolCall());
+    }
+
+    private void apply(BudgetCharge charge) {
         inputTokensUsed += charge.inputTokens();
         outputTokensUsed += charge.outputTokens();
         toolCallsUsed += charge.toolCalls();
         estimatedCostUsd = estimatedCostUsd.add(charge.estimatedCostUsd());
+    }
+
+    private boolean canApply(BudgetCharge charge) {
+        if (elapsed().compareTo(limits.maxWallClock()) >= 0) {
+            return false;
+        }
+        long tokensAfterCharge = tokensUsed() + charge.inputTokens() + charge.outputTokens();
+        long toolCallsAfterCharge = toolCallsUsed + charge.toolCalls();
+        BigDecimal costAfterCharge = estimatedCostUsd.add(charge.estimatedCostUsd());
+
+        return tokensAfterCharge <= limits.maxTokens()
+                && toolCallsAfterCharge <= limits.maxToolCalls()
+                && costAfterCharge.compareTo(limits.maxEstimatedCostUsd()) <= 0;
     }
 
     public synchronized void chargeToolCall() {

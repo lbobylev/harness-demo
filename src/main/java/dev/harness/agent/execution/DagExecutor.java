@@ -95,8 +95,13 @@ public class DagExecutor {
 
     private void runNode(Plan plan, Budget budget, PlanNode node, NodeExecutionListener listener) {
         long startedAt = System.nanoTime();
+        if (!budget.tryChargeToolCall()) {
+            node.setStatus(SKIPPED);
+            node.setError("budget exhausted");
+            listener.onNodeEvent(node, "node.skip", elapsedSince(startedAt), budget);
+            return;
+        }
         node.setStatus(NodeStatus.RUNNING);
-        budget.chargeToolCall();
         listener.onNodeEvent(node, "node.start", null, budget);
         try {
             var args = materializeArguments(plan, node);

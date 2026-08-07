@@ -95,6 +95,35 @@ class DagExecutorTests {
     }
 
     @Test
+    void doesNotExecuteMoreReadyNodesThanRemainingToolCallBudget() {
+        Budget budget = new Budget(new BudgetLimits(
+                100,
+                2,
+                Duration.ofMinutes(1),
+                new BigDecimal("1.00")
+        ));
+        AtomicInteger calls = new AtomicInteger();
+        Plan plan = new Plan(List.of(
+                node("a", "tool_a"),
+                node("b", "tool_b"),
+                node("c", "tool_c"),
+                node("d", "tool_d")
+        ));
+
+        DagExecutionResult result = new DagExecutor((name, args) -> {
+            calls.incrementAndGet();
+            return ToolExecutionResult.of(name);
+        }, 4).execute(plan, budget);
+
+        assertThat(result.successful()).isFalse();
+        assertThat(calls).hasValue(2);
+        assertThat(budget.snapshot().toolCallsUsed()).isEqualTo(2);
+        assertThat(plan.nodes()).filteredOn(PlanNode::isDone).hasSize(2);
+        assertThat(plan.nodes()).filteredOn(PlanNode::isSkipped).hasSize(2)
+                .allSatisfy(node -> assertThat(node.getError()).isEqualTo("budget exhausted"));
+    }
+
+    @Test
     void chargesBudgetForToolAiUsage() {
         Budget budget = budgetWithPricing();
         PlanNode facts = node("facts", "get_genre_facts");

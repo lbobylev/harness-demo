@@ -75,6 +75,21 @@ class BudgetTests {
     }
 
     @Test
+    void tryChargeToolCallDoesNotExceedLimit() {
+        Budget budget = new Budget(new BudgetLimits(
+                100,
+                1,
+                Duration.ofMinutes(1),
+                new BigDecimal("1.00")
+        ));
+
+        assertThat(budget.tryChargeToolCall()).isTrue();
+        assertThat(budget.tryChargeToolCall()).isFalse();
+
+        assertThat(budget.snapshot().toolCallsUsed()).isEqualTo(1);
+    }
+
+    @Test
     void exhaustedWhenPressureReachesOne() {
         Budget budget = new Budget(new BudgetLimits(
                 100,
