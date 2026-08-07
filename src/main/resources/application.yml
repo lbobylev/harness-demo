@@ -9,6 +9,8 @@ spring:
           model: ${OPENAI_MODEL:gpt-4.1-mini}
 
 harness:
+  replanning:
+    max-replans: 1
   execution:
     max-concurrency: 5
   budget:
