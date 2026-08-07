@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: spring-ai-agentic-harness
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:gpt-4.1-mini}
+
+harness:
+  execution:
+    max-concurrency: 5
+  budget:
+    max-tokens: 20000
+    max-tool-calls: 50
+    max-wall-clock: 60s
+    max-estimated-cost-usd: 0.25
+    high-pressure-threshold: 0.9
+  pricing:
+    model: ${OPENAI_MODEL:gpt-4.1-mini}
+    input-token-usd: 0.0000004
+    output-token-usd: 0.0000016

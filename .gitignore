@@ -1,0 +1,9 @@
+.gradle/
+build/
+
+!gradle/wrapper/gradle-wrapper.jar
+
+openspec/
+
+minimal_agentic_harness.md
+article.md
