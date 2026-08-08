@@ -5,9 +5,8 @@ import dev.harness.agent.plan.ArgumentValue;
 import dev.harness.agent.plan.ArgumentValueType;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.plan.PlanNode;
-import dev.harness.agent.ai.AiUsageExtractor;
-import dev.harness.agent.tools.GameRecommendationData;
-import dev.harness.agent.tools.GameRecommendationTools;
+import dev.harness.agent.incident.IncidentData;
+import dev.harness.agent.tools.IncidentInvestigationTools;
 import dev.harness.agent.tools.ToolCatalog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,7 +24,7 @@ class DagValidatorTests {
 
     @BeforeEach
     void setUp() {
-        GameRecommendationTools tools = new GameRecommendationTools(new GameRecommendationData(), null, new AiUsageExtractor());
+        IncidentInvestigationTools tools = new IncidentInvestigationTools(new IncidentData());
         validator = new DagValidator(new ToolCatalog(tools));
     }
 
@@ -41,8 +40,8 @@ class DagValidatorTests {
     @Test
     void rejectsNullDependencyId() {
         Plan plan = new Plan(List.of(
-                new PlanNode("facts", "get_genre_facts", Arrays.asList((String) null)),
-                node("summary", "summarizer_node", "facts")));
+                new PlanNode("logs", "query_loki", Arrays.asList((String) null)),
+                node("report", "build_incident_report", "logs")));
 
         assertThatThrownBy(() -> validator.validate(plan))
                 .isInstanceOf(PlanValidationException.class)
@@ -59,9 +58,9 @@ class DagValidatorTests {
     @Test
     void rejectsDuplicateNodeIds() {
         Plan plan = new Plan(List.of(
-                node("facts", "get_genre_facts"),
-                node("facts", "get_genre_reviews"),
-                node("summary", "summarizer_node", "facts")));
+                node("logs", "query_loki"),
+                node("logs", "query_prometheus"),
+                node("report", "build_incident_report", "logs")));
 
         assertThatThrownBy(() -> validator.validate(plan))
                 .isInstanceOf(PlanValidationException.class)
@@ -71,7 +70,7 @@ class DagValidatorTests {
     @Test
     void rejectsMissingDependencyReference() {
         Plan plan = new Plan(List.of(
-                node("summary", "summarizer_node", "missing")));
+                node("report", "build_incident_report", "missing")));
 
         assertThatThrownBy(() -> validator.validate(plan))
                 .isInstanceOf(PlanValidationException.class)
@@ -82,7 +81,7 @@ class DagValidatorTests {
     void rejectsUnknownTool() {
         Plan plan = new Plan(List.of(
                 node("bad", "delete_database"),
-                node("summary", "summarizer_node", "bad")));
+                node("report", "build_incident_report", "bad")));
 
         assertThatThrownBy(() -> validator.validate(plan))
                 .isInstanceOf(PlanValidationException.class)
@@ -92,8 +91,19 @@ class DagValidatorTests {
     @Test
     void rejectsCycles() {
         Plan plan = new Plan(List.of(
-                node("facts", "get_genre_facts", "summary"),
-                node("summary", "summarizer_node", "facts")));
+                validQueryNode("logs", "report"),
+                new PlanNode("signature", "find_log_signature", List.of(
+                        nodeResult("logs", "logs")
+                ), List.of("logs")),
+                new PlanNode("hypothesis", "test_hypothesis", List.of(
+                        literal("hypothesis", "catalog-service degradation"),
+                        nodeResult("evidence", "signature")
+                ), List.of("signature")),
+                new PlanNode("report", "build_incident_report", List.of(
+                        literal("incident", "checkout 5xx increased"),
+                        nodeResult("hypothesisAssessment", "hypothesis"),
+                        nodeResult("evidence", "signature")
+                ), List.of("hypothesis", "signature"))));
 
         assertThatThrownBy(() -> validator.validate(plan))
                 .isInstanceOf(PlanValidationException.class)
@@ -103,8 +113,10 @@ class DagValidatorTests {
     @Test
     void rejectsMissingFinalSummaryNode() {
         Plan plan = new Plan(List.of(
-                node("facts", "get_genre_facts"),
-                node("reviews", "get_genre_reviews")));
+                validQueryNode("logs"),
+                new PlanNode("signature", "find_log_signature", List.of(
+                        nodeResult("logs", "logs")
+                ), List.of("logs"))));
 
         assertThatThrownBy(() -> validator.validate(plan))
                 .isInstanceOf(PlanValidationException.class)
@@ -114,9 +126,24 @@ class DagValidatorTests {
     @Test
     void rejectsMultipleFinalSummaryNodes() {
         Plan plan = new Plan(List.of(
-                node("facts", "get_genre_facts"),
-                node("summary", "summarizer_node", "facts"),
-                node("summary_2", "summarizer_node", "facts")));
+                validQueryNode("logs"),
+                new PlanNode("signature", "find_log_signature", List.of(
+                        nodeResult("logs", "logs")
+                ), List.of("logs")),
+                new PlanNode("hypothesis", "test_hypothesis", List.of(
+                        literal("hypothesis", "catalog-service degradation"),
+                        nodeResult("evidence", "signature")
+                ), List.of("signature")),
+                new PlanNode("report", "build_incident_report", List.of(
+                        literal("incident", "checkout 5xx increased"),
+                        nodeResult("hypothesisAssessment", "hypothesis"),
+                        nodeResult("evidence", "signature")
+                ), List.of("hypothesis", "signature")),
+                new PlanNode("report_2", "build_incident_report", List.of(
+                        literal("incident", "checkout 5xx increased"),
+                        nodeResult("hypothesisAssessment", "hypothesis"),
+                        nodeResult("evidence", "signature")
+                ), List.of("hypothesis", "signature"))));
 
         assertThatThrownBy(() -> validator.validate(plan))
                 .isInstanceOf(PlanValidationException.class)
@@ -126,10 +153,16 @@ class DagValidatorTests {
     @Test
     void rejectsNodeResultArgumentNotListedAsDependency() {
         Plan plan = new Plan(List.of(
-                node("facts", "get_genre_facts"),
-                new PlanNode("summary", "summarizer_node", List.of(
-                        nodeResult("genreFacts", "facts")
-                ), List.of())));
+                new PlanNode("logs", "query_loki", List.of(
+                        literal("service", "checkout-service"),
+                        literal("query", "error"),
+                        literal("from", "14:20"),
+                        literal("to", "14:40")
+                ), List.of()),
+                new PlanNode("signature", "find_log_signature", List.of(
+                        nodeResult("logs", "logs")
+                ), List.of()),
+                node("report", "build_incident_report", "signature")));
 
         assertThatThrownBy(() -> validator.validate(plan))
                 .isInstanceOf(PlanValidationException.class)
@@ -139,9 +172,10 @@ class DagValidatorTests {
     @Test
     void rejectsBlankLiteralArgumentValue() {
         Plan plan = new Plan(List.of(
-                new PlanNode("summary", "summarizer_node", List.of(
-                        literal("preferences", " ")
-                ), List.of())));
+                new PlanNode("logs", "query_loki", List.of(
+                        literal("service", " ")
+                ), List.of()),
+                node("report", "build_incident_report", "logs")));
 
         assertThatThrownBy(() -> validator.validate(plan))
                 .isInstanceOf(PlanValidationException.class)
@@ -151,7 +185,7 @@ class DagValidatorTests {
     @Test
     void rejectsUnknownToolArgument() {
         Plan plan = new Plan(List.of(
-                new PlanNode("summary", "summarizer_node", List.of(
+                new PlanNode("report", "build_incident_report", List.of(
                         literal("unknown", "value")
                 ), List.of())));
 
@@ -163,11 +197,11 @@ class DagValidatorTests {
     @Test
     void rejectsMissingRequiredToolArgument() {
         Plan plan = new Plan(List.of(
-                node("genre_facts", "get_genre_facts"),
-                new PlanNode("summary", "summarizer_node", List.of(
-                        literal("preferences", "cozy exploration"),
-                        nodeResult("genreFacts", "genre_facts")
-                ), List.of("genre_facts"))));
+                node("hypothesis", "test_hypothesis"),
+                new PlanNode("report", "build_incident_report", List.of(
+                        literal("incident", "checkout 5xx increased"),
+                        nodeResult("hypothesisAssessment", "hypothesis")
+                ), List.of("hypothesis"))));
 
         assertThatThrownBy(() -> validator.validate(plan))
                 .isInstanceOf(PlanValidationException.class)
@@ -176,21 +210,37 @@ class DagValidatorTests {
 
     private static Plan validPlan() {
         return new Plan(List.of(
-                node("genre_facts", "get_genre_facts"),
-                node("genre_reviews", "get_genre_reviews"),
-                node("games", "get_games"),
-                node("prices", "get_prices"),
-                new PlanNode("summary", "summarizer_node", List.of(
-                        literal("preferences", "cozy exploration"),
-                        nodeResult("genreFacts", "genre_facts"),
-                        nodeResult("genreReviews", "genre_reviews"),
-                        nodeResult("games", "games"),
-                        nodeResult("prices", "prices")
-                ), List.of("genre_facts", "genre_reviews", "games", "prices"))));
+                new PlanNode("logs", "query_loki", List.of(
+                        literal("service", "checkout-service"),
+                        literal("query", "error timeout"),
+                        literal("from", "14:20"),
+                        literal("to", "14:40")
+                ), List.of()),
+                new PlanNode("signature", "find_log_signature", List.of(
+                        nodeResult("logs", "logs")
+                ), List.of("logs")),
+                new PlanNode("hypothesis", "test_hypothesis", List.of(
+                        literal("hypothesis", "catalog-service degradation"),
+                        nodeResult("evidence", "signature")
+                ), List.of("signature")),
+                new PlanNode("report", "build_incident_report", List.of(
+                        literal("incident", "checkout 5xx increased"),
+                        nodeResult("hypothesisAssessment", "hypothesis"),
+                        nodeResult("evidence", "signature")
+                ), List.of("hypothesis", "signature"))));
     }
 
     private static PlanNode node(String id, String tool, String... deps) {
         return new PlanNode(id, tool, List.of(deps));
+    }
+
+    private static PlanNode validQueryNode(String id, String... deps) {
+        return new PlanNode(id, "query_loki", List.of(
+                literal("service", "checkout-service"),
+                literal("query", "error"),
+                literal("from", "14:20"),
+                literal("to", "14:40")
+        ), List.of(deps));
     }
 
     private static ArgumentBinding literal(String argumentName, String value) {

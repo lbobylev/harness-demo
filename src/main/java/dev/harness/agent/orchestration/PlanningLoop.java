@@ -8,6 +8,7 @@ import dev.harness.agent.run.RecoveryPolicy;
 import dev.harness.agent.run.RunStatus;
 import dev.harness.agent.tools.ToolCatalog;
 import dev.harness.agent.validation.DagValidator;
+import dev.harness.agent.validation.IncidentPolicyValidator;
 import dev.harness.agent.validation.PlanValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +21,8 @@ final class PlanningLoop {
 
     private final DagValidator validator;
 
+    private final IncidentPolicyValidator policyValidator;
+
     private final ToolCatalog toolCatalog;
 
     private final RunLifecycle lifecycle;
@@ -29,11 +32,13 @@ final class PlanningLoop {
     PlanningLoop(
             Planner planner,
             DagValidator validator,
+            IncidentPolicyValidator policyValidator,
             ToolCatalog toolCatalog,
             RunLifecycle lifecycle,
             int maxReplans) {
         this.planner = planner;
         this.validator = validator;
+        this.policyValidator = policyValidator;
         this.toolCatalog = toolCatalog;
         this.lifecycle = lifecycle;
         this.maxReplans = Math.max(0, maxReplans);
@@ -44,7 +49,7 @@ final class PlanningLoop {
             log.info("Run {} planning started for attempt {}", state.context().runId(), state.attempt());
             var planningResult = planner.plan(new PlanningRequest(
                     state.request().goal(),
-                    toolCatalog.definitions().toString(),
+                    toolCatalog.plannerCatalog(),
                     state.failureContext()));
 
             RunState next = state.withPlan(planningResult.plan());
@@ -69,6 +74,7 @@ final class PlanningLoop {
         try {
             log.info("Run {} validation started", state.context().runId());
             validator.validate(state.plan());
+            policyValidator.validate(state.plan());
             lifecycle.emit(state, "validation.finish", null, null, "DONE", "validation finished");
             log.info("Run {} validation finished", state.context().runId());
             return state.withPhase(RunPhase.EXECUTING);

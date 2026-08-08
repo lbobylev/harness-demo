@@ -1,6 +1,6 @@
 package dev.harness.agent.tools;
 
-import dev.harness.agent.ai.AiUsageExtractor;
+import dev.harness.agent.incident.IncidentData;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -9,14 +9,20 @@ class ToolCatalogTests {
 
     @Test
     void exposesSpringAiToolDefinitions() {
-        ToolCatalog catalog = new ToolCatalog(new GameRecommendationTools(new GameRecommendationData(), null, new AiUsageExtractor()));
+        ToolCatalog catalog = new ToolCatalog(new IncidentInvestigationTools(new IncidentData()));
 
         assertThat(catalog.toolNames()).containsExactlyInAnyOrder(
-                "get_genre_facts",
-                "get_genre_reviews",
-                "get_games",
-                "get_prices",
-                "summarizer_node"
+                "query_prometheus",
+                "query_loki",
+                "query_tempo",
+                "get_deployments",
+                "get_config_changes",
+                "compare_periods",
+                "find_log_signature",
+                "assemble_evidence",
+                "correlate",
+                "test_hypothesis",
+                "build_incident_report"
         );
         assertThat(catalog.definitions())
                 .allSatisfy(definition -> {
@@ -26,9 +32,13 @@ class ToolCatalogTests {
         assertThat(catalog.finalSynthesisTool())
                 .get()
                 .extracting(ToolDefinitionView::name)
-                .isEqualTo("summarizer_node");
-        assertThat(catalog.requiredArgumentNames("summarizer_node"))
-                .containsExactlyInAnyOrder("preferences", "genreFacts", "genreReviews", "games", "prices");
-        assertThat(catalog.argumentNames("get_genre_facts")).isEmpty();
+                .isEqualTo("build_incident_report");
+        assertThat(catalog.roleOf("query_prometheus")).isEqualTo(ToolRole.EVIDENCE);
+        assertThat(catalog.roleOf("compare_periods")).isEqualTo(ToolRole.ANALYSIS);
+        assertThat(catalog.roleOf("test_hypothesis")).isEqualTo(ToolRole.HYPOTHESIS_TEST);
+        assertThat(catalog.requiredArgumentNames("build_incident_report"))
+                .containsExactlyInAnyOrder("incident", "hypothesisAssessment", "evidence");
+        assertThat(catalog.argumentNames("query_prometheus"))
+                .containsExactlyInAnyOrder("service", "metric", "from", "to");
     }
 }

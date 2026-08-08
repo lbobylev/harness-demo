@@ -7,6 +7,7 @@ import dev.harness.agent.planning.Planner;
 import dev.harness.agent.run.RunResult;
 import dev.harness.agent.tools.ToolCatalog;
 import dev.harness.agent.validation.DagValidator;
+import dev.harness.agent.validation.IncidentPolicyValidator;
 import dev.harness.agent.verification.ReportVerifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -22,6 +23,7 @@ public class AgentOrchestrator {
     public AgentOrchestrator(
             Planner planner,
             DagValidator validator,
+            IncidentPolicyValidator policyValidator,
             DagScheduler scheduler,
             ReportVerifier verifier,
             ToolCatalog toolCatalog,
@@ -38,7 +40,7 @@ public class AgentOrchestrator {
         var lifecycle = new RunLifecycle(toolCatalog, budgetLimits, modelPricing);
         var safeMaxReplans = Math.max(0, maxReplans);
         this.runtime = new AgentRuntime(
-                new PlanningLoop(planner, validator, toolCatalog, lifecycle, safeMaxReplans),
+                new PlanningLoop(planner, validator, policyValidator, toolCatalog, lifecycle, safeMaxReplans),
                 new ExecutionEngine(scheduler, lifecycle, safeMaxReplans),
                 lifecycle,
                 verifier);

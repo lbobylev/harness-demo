@@ -6,17 +6,17 @@ spring:
       api-key: ${OPENAI_API_KEY:}
       chat:
         options:
-          model: ${OPENAI_MODEL:gpt-4.1-mini}
+          model: ${OPENAI_MODEL:gpt-5.5}
 
 harness:
   replanning:
-    max-replans: 1
+    max-replans: 2
   execution:
     max-concurrency: 5
   budget:
     max-tokens: 20000
     max-tool-calls: 50
-    max-wall-clock: 60s
+    max-wall-clock: 120s
     max-estimated-cost-usd: 0.25
     high-pressure-threshold: 0.9
   pricing:

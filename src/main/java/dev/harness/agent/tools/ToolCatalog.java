@@ -13,7 +13,17 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static dev.harness.agent.tools.GameRecommendationTools.SUMMARIZER;
+import static dev.harness.agent.tools.IncidentInvestigationTools.ASSEMBLE_EVIDENCE;
+import static dev.harness.agent.tools.IncidentInvestigationTools.BUILD_INCIDENT_REPORT;
+import static dev.harness.agent.tools.IncidentInvestigationTools.COMPARE_PERIODS;
+import static dev.harness.agent.tools.IncidentInvestigationTools.CORRELATE;
+import static dev.harness.agent.tools.IncidentInvestigationTools.FIND_LOG_SIGNATURE;
+import static dev.harness.agent.tools.IncidentInvestigationTools.GET_CONFIG_CHANGES;
+import static dev.harness.agent.tools.IncidentInvestigationTools.GET_DEPLOYMENTS;
+import static dev.harness.agent.tools.IncidentInvestigationTools.QUERY_LOKI;
+import static dev.harness.agent.tools.IncidentInvestigationTools.QUERY_PROMETHEUS;
+import static dev.harness.agent.tools.IncidentInvestigationTools.QUERY_TEMPO;
+import static dev.harness.agent.tools.IncidentInvestigationTools.TEST_HYPOTHESIS;
 
 @Component
 public class ToolCatalog {
@@ -22,7 +32,7 @@ public class ToolCatalog {
 
     private final ToolCallbackProvider callbackProvider;
 
-    public ToolCatalog(GameRecommendationTools tools) {
+    public ToolCatalog(IncidentInvestigationTools tools) {
         this.callbackProvider = MethodToolCallbackProvider.builder()
                 .toolObjects(tools)
                 .build();
@@ -41,6 +51,16 @@ public class ToolCatalog {
                         definition.inputSchema(),
                         roleOf(definition.name())))
                 .toList();
+    }
+
+    public String plannerCatalog() {
+        return definitions().stream()
+                .map(definition -> "%s(%s) -> %s role=%s".formatted(
+                        definition.name(),
+                        String.join(", ", argumentNames(definition.name())),
+                        resultType(definition.name()),
+                        definition.role()))
+                .collect(Collectors.joining("\n"));
     }
 
     public Set<String> toolNames() {
@@ -68,7 +88,30 @@ public class ToolCatalog {
     }
 
     public ToolRole roleOf(String name) {
-        return SUMMARIZER.equals(name) ? ToolRole.FINAL_SYNTHESIS : ToolRole.DATA;
+        return switch (name) {
+            case QUERY_PROMETHEUS, QUERY_LOKI, QUERY_TEMPO, GET_DEPLOYMENTS, GET_CONFIG_CHANGES -> ToolRole.EVIDENCE;
+            case COMPARE_PERIODS, FIND_LOG_SIGNATURE, ASSEMBLE_EVIDENCE, CORRELATE -> ToolRole.ANALYSIS;
+            case TEST_HYPOTHESIS -> ToolRole.HYPOTHESIS_TEST;
+            case BUILD_INCIDENT_REPORT -> ToolRole.FINAL_SYNTHESIS;
+            default -> ToolRole.DATA;
+        };
+    }
+
+    public String resultType(String name) {
+        return switch (name) {
+            case QUERY_PROMETHEUS -> "PrometheusQueryResult";
+            case QUERY_LOKI -> "LokiQueryResult";
+            case QUERY_TEMPO -> "TempoQueryResult";
+            case GET_DEPLOYMENTS -> "List<DeploymentEvent>";
+            case GET_CONFIG_CHANGES -> "List<ConfigChange>";
+            case COMPARE_PERIODS -> "PeriodComparison";
+            case FIND_LOG_SIGNATURE -> "LogSignature";
+            case ASSEMBLE_EVIDENCE -> "EvidenceBundle";
+            case CORRELATE -> "CorrelationResult";
+            case TEST_HYPOTHESIS -> "HypothesisAssessment";
+            case BUILD_INCIDENT_REPORT -> "IncidentReport";
+            default -> "Object";
+        };
     }
 
     public List<ToolDefinitionView> finalSynthesisTools() {

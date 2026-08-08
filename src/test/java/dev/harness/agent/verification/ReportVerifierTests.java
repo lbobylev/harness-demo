@@ -1,18 +1,17 @@
 package dev.harness.agent.verification;
 
-import dev.harness.agent.ai.AiUsageExtractor;
+import dev.harness.agent.incident.IncidentData;
+import dev.harness.agent.incident.IncidentReport;
 import dev.harness.agent.plan.NodeStatus;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.plan.PlanNode;
 import dev.harness.agent.run.VerificationVerdict;
-import dev.harness.agent.tools.GameRecommendationData;
-import dev.harness.agent.tools.GameRecommendationTools;
+import dev.harness.agent.tools.IncidentInvestigationTools;
 import dev.harness.agent.tools.ToolCatalog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,23 +21,23 @@ class ReportVerifierTests {
 
     @BeforeEach
     void setUp() {
-        GameRecommendationTools tools = new GameRecommendationTools(new GameRecommendationData(), null, new AiUsageExtractor());
+        IncidentInvestigationTools tools = new IncidentInvestigationTools(new IncidentData());
         verifier = new ReportVerifier(new ToolCatalog(tools));
     }
 
     @Test
     void passesCompletedPlanWithFinalReport() {
-        PlanNode facts = done(node("facts", "get_genre_facts"), List.of("facts"));
-        PlanNode summary = done(node("summary", "summarizer_node", "facts"), new TestReport("Useful final report"));
+        PlanNode hypothesis = done(node("hypothesis", "test_hypothesis"), List.of("hypothesis"));
+        PlanNode summary = done(node("summary", "build_incident_report", "hypothesis"), validReport());
 
-        VerificationVerdict verdict = verifier.verify(new Plan(List.of(facts, summary)));
+        VerificationVerdict verdict = verifier.verify(new Plan(List.of(hypothesis, summary)));
 
         assertThat(verdict.passed()).isTrue();
     }
 
     @Test
     void rejectsMissingFinalSynthesisNode() {
-        PlanNode facts = done(node("facts", "get_genre_facts"), List.of("facts"));
+        PlanNode facts = done(node("facts", "query_loki"), List.of("facts"));
 
         VerificationVerdict verdict = verifier.verify(new Plan(List.of(facts)));
 
@@ -48,7 +47,7 @@ class ReportVerifierTests {
 
     @Test
     void rejectsFinalNodeThatDidNotFinish() {
-        PlanNode summary = node("summary", "summarizer_node");
+        PlanNode summary = node("summary", "build_incident_report");
 
         VerificationVerdict verdict = verifier.verify(new Plan(List.of(summary)));
 
@@ -58,9 +57,9 @@ class ReportVerifierTests {
 
     @Test
     void rejectsFailedOrSkippedNodes() {
-        PlanNode failed = node("facts", "get_genre_facts");
+        PlanNode failed = node("facts", "query_loki");
         failed.setStatus(NodeStatus.FAILED);
-        PlanNode summary = done(node("summary", "summarizer_node", "facts"), new TestReport("Final report"));
+        PlanNode summary = done(node("summary", "build_incident_report", "facts"), validReport());
 
         VerificationVerdict verdict = verifier.verify(new Plan(List.of(failed, summary)));
 
@@ -70,8 +69,8 @@ class ReportVerifierTests {
 
     @Test
     void rejectsFinalDependencyThatDidNotFinish() {
-        PlanNode facts = node("facts", "get_genre_facts");
-        PlanNode summary = done(node("summary", "summarizer_node", "facts"), new TestReport("Final report"));
+        PlanNode facts = node("facts", "test_hypothesis");
+        PlanNode summary = done(node("summary", "build_incident_report", "facts"), validReport());
 
         VerificationVerdict verdict = verifier.verify(new Plan(List.of(facts, summary)));
 
@@ -81,22 +80,23 @@ class ReportVerifierTests {
 
     @Test
     void rejectsFinalResultWithoutFinalReportContract() {
-        PlanNode summary = done(node("summary", "summarizer_node"), "plain string");
+        PlanNode summary = done(node("summary", "build_incident_report"), "plain string");
 
         VerificationVerdict verdict = verifier.verify(new Plan(List.of(summary)));
 
         assertThat(verdict.passed()).isFalse();
-        assertThat(verdict.reason()).contains("FinalReport");
+        assertThat(verdict.reason()).contains("IncidentReport");
     }
 
     @Test
-    void rejectsBlankFinalReport() {
-        PlanNode summary = done(node("summary", "summarizer_node"), new TestReport("  "));
+    void rejectsWeakIncidentReport() {
+        PlanNode summary = done(node("summary", "build_incident_report"), new IncidentReport(
+                " ", 0.1, List.of(), List.of(), List.of(), ""));
 
         VerificationVerdict verdict = verifier.verify(new Plan(List.of(summary)));
 
         assertThat(verdict.passed()).isFalse();
-        assertThat(verdict.reason()).contains("must not be blank");
+        assertThat(verdict.reason()).contains("rootCause");
     }
 
     private static PlanNode node(String id, String tool, String... deps) {
@@ -109,6 +109,13 @@ class ReportVerifierTests {
         return node;
     }
 
-    private record TestReport(String reportText) implements FinalReport {
+    private static IncidentReport validReport() {
+        return new IncidentReport(
+                "catalog-service degradation caused checkout failures",
+                0.89,
+                List.of("14:29 deploy", "14:31 catalog latency", "14:32 checkout 5xx"),
+                List.of("catalog latency increased", "checkout logs show timeouts", "traces point to catalog"),
+                List.of("checkout deployment regression"),
+                "Mitigate catalog-service degradation");
     }
 }

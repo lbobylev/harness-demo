@@ -30,14 +30,20 @@ public class DagValidator {
         }
 
         Map<String, PlanNode> nodesById = indexNodes(plan);
-        validateDependenciesExist(nodesById);
-        validateToolsExist(nodesById);
+        int finalNodeCount = 0;
+        for (PlanNode node : nodesById.values()) {
+            validateDependenciesExist(node, nodesById);
+            validateToolExists(node);
+            validateArguments(node, nodesById);
+            if (toolCatalog.roleOf(node.getTool()) == ToolRole.FINAL_SYNTHESIS) {
+                finalNodeCount++;
+            }
+        }
         validateNoCycles(nodesById);
-        validateSingleFinalNode(nodesById);
-        validateArguments(nodesById);
+        validateSingleFinalNode(finalNodeCount);
     }
 
-    private Map<String, PlanNode> indexNodes(Plan plan) {
+    private static Map<String, PlanNode> indexNodes(Plan plan) {
         Map<String, PlanNode> nodesById = new LinkedHashMap<>();
 
         for (PlanNode node : plan.nodes()) {
@@ -59,53 +65,47 @@ public class DagValidator {
         return nodesById;
     }
 
-    private void validateDependenciesExist(Map<String, PlanNode> nodesById) {
-        for (PlanNode node : nodesById.values()) {
-            for (String dep : node.getDeps()) {
-                if (dep == null || dep.isBlank()) {
-                    throw new PlanValidationException("node %s dependency id must not be blank".formatted(node.getId()));
-                }
-                if (!nodesById.containsKey(dep)) {
-                    throw new PlanValidationException("node %s depends on missing node: %s".formatted(node.getId(), dep));
-                }
+    private static void validateDependenciesExist(PlanNode node, Map<String, PlanNode> nodesById) {
+        for (String dep : node.getDeps()) {
+            if (dep == null || dep.isBlank()) {
+                throw new PlanValidationException("node %s dependency id must not be blank".formatted(node.getId()));
+            }
+            if (!nodesById.containsKey(dep)) {
+                throw new PlanValidationException("node %s depends on missing node: %s".formatted(node.getId(), dep));
             }
         }
     }
 
-    private void validateToolsExist(Map<String, PlanNode> nodesById) {
-        for (PlanNode node : nodesById.values()) {
-            if (node.getTool() == null || node.getTool().isBlank()) {
-                throw new PlanValidationException("node %s tool must not be blank".formatted(node.getId()));
-            }
-            if (!toolCatalog.hasTool(node.getTool())) {
-                throw new PlanValidationException("node %s references unknown tool: %s".formatted(node.getId(), node.getTool()));
-            }
+    private void validateToolExists(PlanNode node) {
+        if (node.getTool() == null || node.getTool().isBlank()) {
+            throw new PlanValidationException("node %s tool must not be blank".formatted(node.getId()));
+        }
+        if (!toolCatalog.hasTool(node.getTool())) {
+            throw new PlanValidationException("node %s references unknown tool: %s".formatted(node.getId(), node.getTool()));
         }
     }
 
-    private void validateArguments(Map<String, PlanNode> nodesById) {
-        for (PlanNode node : nodesById.values()) {
-            Set<String> argumentNames = new HashSet<>();
-            Set<String> knownArgumentNames = toolCatalog.argumentNames(node.getTool());
-            for (ArgumentBinding argument : node.getArguments()) {
-                if (argument == null) {
-                    throw new PlanValidationException("node %s contains null argument".formatted(node.getId()));
-                }
-                if (argument.argumentName() == null || argument.argumentName().isBlank()) {
-                    throw new PlanValidationException("node %s argument name must not be blank".formatted(node.getId()));
-                }
-                if (!knownArgumentNames.contains(argument.argumentName())) {
-                    throw new PlanValidationException("node %s references unknown argument for tool %s: %s"
-                            .formatted(node.getId(), node.getTool(), argument.argumentName()));
-                }
-                if (!argumentNames.add(argument.argumentName())) {
-                    throw new PlanValidationException("node %s contains duplicate argument: %s"
-                            .formatted(node.getId(), argument.argumentName()));
-                }
-                validateArgumentValue(node, argument.value(), nodesById);
+    private void validateArguments(PlanNode node, Map<String, PlanNode> nodesById) {
+        Set<String> argumentNames = new HashSet<>();
+        Set<String> knownArgumentNames = toolCatalog.argumentNames(node.getTool());
+        for (ArgumentBinding argument : node.getArguments()) {
+            if (argument == null) {
+                throw new PlanValidationException("node %s contains null argument".formatted(node.getId()));
             }
-            validateRequiredArgumentsPresent(node, argumentNames);
+            if (argument.argumentName() == null || argument.argumentName().isBlank()) {
+                throw new PlanValidationException("node %s argument name must not be blank".formatted(node.getId()));
+            }
+            if (!knownArgumentNames.contains(argument.argumentName())) {
+                throw new PlanValidationException("node %s references unknown argument for tool %s: %s"
+                        .formatted(node.getId(), node.getTool(), argument.argumentName()));
+            }
+            if (!argumentNames.add(argument.argumentName())) {
+                throw new PlanValidationException("node %s contains duplicate argument: %s"
+                        .formatted(node.getId(), argument.argumentName()));
+            }
+            validateArgumentValue(node, argument.value(), nodesById);
         }
+        validateRequiredArgumentsPresent(node, argumentNames);
     }
 
     private void validateRequiredArgumentsPresent(PlanNode node, Set<String> argumentNames) {
@@ -117,7 +117,7 @@ public class DagValidator {
         }
     }
 
-    private void validateArgumentValue(PlanNode node, ArgumentValue value, Map<String, PlanNode> nodesById) {
+    private static void validateArgumentValue(PlanNode node, ArgumentValue value, Map<String, PlanNode> nodesById) {
         if (value == null) {
             throw new PlanValidationException("node %s argument value must not be null".formatted(node.getId()));
         }
@@ -151,7 +151,7 @@ public class DagValidator {
         }
     }
 
-    private void validateNoCycles(Map<String, PlanNode> nodesById) {
+    private static void validateNoCycles(Map<String, PlanNode> nodesById) {
         Map<String, VisitState> states = new HashMap<>();
         for (String id : nodesById.keySet()) {
             states.put(id, VisitState.UNVISITED);
@@ -164,7 +164,7 @@ public class DagValidator {
         }
     }
 
-    private void visit(String id, Map<String, PlanNode> nodesById, Map<String, VisitState> states) {
+    private static void visit(String id, Map<String, PlanNode> nodesById, Map<String, VisitState> states) {
         VisitState state = states.get(id);
         if (state == VisitState.VISITING) {
             throw new PlanValidationException("cycle detected at node: " + id);
@@ -180,11 +180,7 @@ public class DagValidator {
         states.put(id, VisitState.VISITED);
     }
 
-    private void validateSingleFinalNode(Map<String, PlanNode> nodesById) {
-        long count = nodesById.values().stream()
-                .filter(node -> toolCatalog.roleOf(node.getTool()) == ToolRole.FINAL_SYNTHESIS)
-                .count();
-
+    private static void validateSingleFinalNode(int count) {
         if (count != 1) {
             throw new PlanValidationException("plan must contain exactly one FINAL_SYNTHESIS node");
         }
