@@ -2,7 +2,7 @@ package dev.harness.agent.orchestration;
 
 import dev.harness.agent.budget.BudgetLimits;
 import dev.harness.agent.budget.ModelPricing;
-import dev.harness.agent.execution.DagExecutor;
+import dev.harness.agent.execution.DagScheduler;
 import dev.harness.agent.planning.Planner;
 import dev.harness.agent.run.RunResult;
 import dev.harness.agent.tools.ToolCatalog;
@@ -22,7 +22,7 @@ public class AgentOrchestrator {
     public AgentOrchestrator(
             Planner planner,
             DagValidator validator,
-            DagExecutor executor,
+            DagScheduler scheduler,
             ReportVerifier verifier,
             ToolCatalog toolCatalog,
             @Value("${harness.budget.max-tokens:20000}") long maxTokens,
@@ -39,7 +39,7 @@ public class AgentOrchestrator {
         var safeMaxReplans = Math.max(0, maxReplans);
         this.runtime = new AgentRuntime(
                 new PlanningLoop(planner, validator, toolCatalog, lifecycle, safeMaxReplans),
-                new ExecutionEngine(executor, lifecycle, safeMaxReplans),
+                new ExecutionEngine(scheduler, lifecycle, safeMaxReplans),
                 lifecycle,
                 verifier);
     }

@@ -2,7 +2,7 @@ package dev.harness.agent.orchestration;
 
 import dev.harness.agent.ai.AiUsage;
 import dev.harness.agent.ai.AiUsageExtractor;
-import dev.harness.agent.execution.DagExecutor;
+import dev.harness.agent.execution.DagScheduler;
 import dev.harness.agent.plan.ArgumentBinding;
 import dev.harness.agent.plan.ArgumentValue;
 import dev.harness.agent.plan.ArgumentValueType;
@@ -302,7 +302,7 @@ class AgentOrchestratorTests {
         return new AgentOrchestrator(
                 planner,
                 new DagValidator(toolCatalog),
-                new DagExecutor(toolExecutor, 2),
+                new DagScheduler(toolExecutor, 2),
                 new ReportVerifier(toolCatalog),
                 toolCatalog,
                 maxTokens,

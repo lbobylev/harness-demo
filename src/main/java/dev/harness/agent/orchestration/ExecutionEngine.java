@@ -1,6 +1,6 @@
 package dev.harness.agent.orchestration;
 
-import dev.harness.agent.execution.DagExecutor;
+import dev.harness.agent.execution.DagScheduler;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.plan.PlanNode;
 import dev.harness.agent.run.ErrorClass;
@@ -18,14 +18,14 @@ final class ExecutionEngine {
 
     private static final Logger log = LoggerFactory.getLogger(ExecutionEngine.class);
 
-    private final DagExecutor executor;
+    private final DagScheduler scheduler;
 
     private final RunLifecycle lifecycle;
 
     private final int maxReplans;
 
-    ExecutionEngine(DagExecutor executor, RunLifecycle lifecycle, int maxReplans) {
-        this.executor = executor;
+    ExecutionEngine(DagScheduler scheduler, RunLifecycle lifecycle, int maxReplans) {
+        this.scheduler = scheduler;
         this.lifecycle = lifecycle;
         this.maxReplans = Math.max(0, maxReplans);
     }
@@ -33,7 +33,7 @@ final class ExecutionEngine {
     RunState execute(RunState state) {
         try {
             log.info("Run {} execution started", state.context().runId());
-            var executionResult = executor.execute(state.plan(), state.context().budget(),
+            var executionResult = scheduler.execute(state.plan(), state.context().budget(),
                     (node, kind, latency, currentBudget) -> lifecycle.emitNodeEvent(
                             state, node, kind, latency, currentBudget));
             lifecycle.emit(state, "execution.finish", null, null,

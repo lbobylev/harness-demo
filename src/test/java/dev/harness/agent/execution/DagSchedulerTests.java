@@ -24,12 +24,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class DagExecutorTests {
+class DagSchedulerTests {
 
     @Test
     void executesIndependentNodesConcurrently() {
@@ -57,7 +58,7 @@ class DagExecutorTests {
                 node("games", "get_games")
         ));
 
-        DagExecutionResult result = new DagExecutor(toolExecutor, 2).execute(plan, budget());
+        DagExecutionResult result = new DagScheduler(toolExecutor, 2).execute(plan, budget());
 
         assertThat(result.successful()).isTrue();
         assertThat(maxActive).hasValue(2);
@@ -75,10 +76,54 @@ class DagExecutorTests {
                 node("games", "get_games", "facts")
         ));
 
-        DagExecutionResult result = new DagExecutor(toolExecutor, 2).execute(plan, budget());
+        DagExecutionResult result = new DagScheduler(toolExecutor, 2).execute(plan, budget());
 
         assertThat(result.successful()).isTrue();
         assertThat(calls).containsExactly("get_genre_facts", "get_games");
+    }
+
+    @Test
+    void schedulesReadyDependentsWithoutWaitingForUnrelatedSlowBranch() {
+        CountDownLatch bStarted = new CountDownLatch(1);
+        CountDownLatch cStarted = new CountDownLatch(1);
+        AtomicBoolean bFinished = new AtomicBoolean();
+        AtomicReference<Boolean> bFinishedWhenCStarted = new AtomicReference<>();
+        AtomicInteger calls = new AtomicInteger();
+        ToolExecutor toolExecutor = (name, args) -> {
+            calls.incrementAndGet();
+            if ("a".equals(name)) {
+                if (!await(bStarted)) {
+                    throw new IllegalStateException("b did not start");
+                }
+                return ToolExecutionResult.of("a");
+            }
+            if ("b".equals(name)) {
+                bStarted.countDown();
+                if (!await(cStarted)) {
+                    throw new IllegalStateException("c did not start before b finished");
+                }
+                bFinished.set(true);
+                return ToolExecutionResult.of("b");
+            }
+            if ("c".equals(name)) {
+                bFinishedWhenCStarted.set(bFinished.get());
+                cStarted.countDown();
+                return ToolExecutionResult.of("c");
+            }
+            return ToolExecutionResult.of(name);
+        };
+        Plan plan = new Plan(List.of(
+                node("a", "a"),
+                node("b", "b"),
+                node("c", "c", "a"),
+                node("d", "d", "b")
+        ));
+
+        DagExecutionResult result = new DagScheduler(toolExecutor, 2).execute(plan, budget());
+
+        assertThat(result.successful()).isTrue();
+        assertThat(calls).hasValue(4);
+        assertThat(bFinishedWhenCStarted.get()).isFalse();
     }
 
     @Test
@@ -89,7 +134,7 @@ class DagExecutorTests {
                 node("games", "get_games")
         ));
 
-        new DagExecutor((name, args) -> ToolExecutionResult.of(name), 2).execute(plan, budget);
+        new DagScheduler((name, args) -> ToolExecutionResult.of(name), 2).execute(plan, budget);
 
         assertThat(budget.snapshot().toolCallsUsed()).isEqualTo(2);
     }
@@ -110,7 +155,7 @@ class DagExecutorTests {
                 node("d", "tool_d")
         ));
 
-        DagExecutionResult result = new DagExecutor((name, args) -> {
+        DagExecutionResult result = new DagScheduler((name, args) -> {
             calls.incrementAndGet();
             return ToolExecutionResult.of(name);
         }, 4).execute(plan, budget);
@@ -124,12 +169,44 @@ class DagExecutorTests {
     }
 
     @Test
+    void propagatesBudgetSkippedRootsToDependents() {
+        Budget budget = new Budget(new BudgetLimits(
+                100,
+                1,
+                Duration.ofMinutes(1),
+                new BigDecimal("1.00")
+        ));
+        AtomicInteger calls = new AtomicInteger();
+        Plan plan = new Plan(List.of(
+                node("a", "a"),
+                node("b", "b"),
+                node("c", "c", "a"),
+                node("d", "d", "b")
+        ));
+
+        DagExecutionResult result = new DagScheduler((name, args) -> {
+            calls.incrementAndGet();
+            return ToolExecutionResult.of(name);
+        }, 2).execute(plan, budget);
+
+        assertThat(result.successful()).isFalse();
+        assertThat(calls).hasValue(1);
+        assertThat(budget.snapshot().toolCallsUsed()).isEqualTo(1);
+        assertThat(plan.nodes()).filteredOn(PlanNode::isDone).hasSize(1);
+        assertThat(plan.nodes()).filteredOn(PlanNode::isSkipped).hasSize(3);
+        assertThat(plan.nodes()).filteredOn(node -> node.isSkipped() && "budget exhausted".equals(node.getError()))
+                .isNotEmpty();
+        assertThat(plan.nodes()).filteredOn(node -> node.isSkipped() && "dependency failed".equals(node.getError()))
+                .isNotEmpty();
+    }
+
+    @Test
     void chargesBudgetForToolAiUsage() {
         Budget budget = budgetWithPricing();
         PlanNode facts = node("facts", "get_genre_facts");
         Plan plan = new Plan(List.of(facts));
 
-        new DagExecutor((name, args) -> new ToolExecutionResult("facts", new AiUsage("test-model", 10, 5, 15)), 2)
+        new DagScheduler((name, args) -> new ToolExecutionResult("facts", new AiUsage("test-model", 10, 5, 15)), 2)
                 .execute(plan, budget);
 
         assertThat(facts.getUsage()).isEqualTo(new AiUsage("test-model", 10, 5, 15));
@@ -152,7 +229,7 @@ class DagExecutorTests {
         PlanNode summary = node("summary", "summary", "facts");
         Plan plan = new Plan(List.of(facts, summary));
 
-        DagExecutionResult result = new DagExecutor(toolExecutor, 2).execute(plan, budget);
+        DagExecutionResult result = new DagScheduler(toolExecutor, 2).execute(plan, budget);
 
         assertThat(result.successful()).isFalse();
         assertThat(calls).hasValue(1);
@@ -173,7 +250,7 @@ class DagExecutorTests {
         PlanNode games = node("games", "get_games", "facts");
         Plan plan = new Plan(List.of(facts, games));
 
-        DagExecutionResult result = new DagExecutor(toolExecutor, 2).execute(plan, budget());
+        DagExecutionResult result = new DagScheduler(toolExecutor, 2).execute(plan, budget());
 
         assertThat(result.successful()).isFalse();
         assertThat(facts.getStatus()).isEqualTo(NodeStatus.FAILED);
@@ -190,7 +267,7 @@ class DagExecutorTests {
         PlanNode facts = node("facts", "get_genre_facts");
         Plan plan = new Plan(List.of(facts));
 
-        DagExecutionResult result = new DagExecutor(toolExecutor, 2).execute(plan, budget());
+        DagExecutionResult result = new DagScheduler(toolExecutor, 2).execute(plan, budget());
 
         assertThat(result.successful()).isFalse();
         assertThat(facts.getStatus()).isEqualTo(NodeStatus.FAILED);
@@ -203,7 +280,7 @@ class DagExecutorTests {
         PlanNode facts = node("facts", "get_genre_facts");
         Plan plan = new Plan(List.of(facts));
 
-        DagExecutionResult result = new DagExecutor((name, args) -> ToolExecutionResult.of(List.of("facts")), 2)
+        DagExecutionResult result = new DagScheduler((name, args) -> ToolExecutionResult.of(List.of("facts")), 2)
                 .execute(plan, budget(), (node, kind, latency, currentBudget) -> events.add(new NodeEvent(
                         kind,
                         node.getId(),
@@ -228,7 +305,7 @@ class DagExecutorTests {
         PlanNode facts = node("facts", "get_genre_facts");
         Plan plan = new Plan(List.of(facts));
 
-        DagExecutionResult result = new DagExecutor((name, args) -> {
+        DagExecutionResult result = new DagScheduler((name, args) -> {
             throw new ToolExecutionException(HarnessErrorCode.MISSING_INFO, "missing info");
         }, 2).execute(plan, budget(), (node, kind, latency, currentBudget) -> events.add(new NodeEvent(
                 kind,
@@ -275,7 +352,7 @@ class DagExecutorTests {
                 ), List.of("facts", "reviews", "games", "prices"))
         ));
 
-        DagExecutionResult result = new DagExecutor(toolExecutor, 4)
+        DagExecutionResult result = new DagScheduler(toolExecutor, 4)
                 .execute(plan, budget());
 
         assertThat(result.successful()).isTrue();
@@ -289,6 +366,15 @@ class DagExecutorTests {
 
     private static PlanNode node(String id, String tool, String... deps) {
         return new PlanNode(id, tool, List.of(deps));
+    }
+
+    private static boolean await(CountDownLatch latch) {
+        try {
+            return latch.await(1, TimeUnit.SECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(exception);
+        }
     }
 
     private static ArgumentBinding literal(String argumentName, String value) {

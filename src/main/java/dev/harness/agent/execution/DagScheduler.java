@@ -13,28 +13,23 @@ import dev.harness.agent.tools.ToolExecutionException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+
+import static dev.harness.agent.plan.NodeStatus.SKIPPED;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-
-import static dev.harness.agent.plan.NodeStatus.FAILED;
-import static dev.harness.agent.plan.NodeStatus.PENDING;
-import static dev.harness.agent.plan.NodeStatus.SKIPPED;
-
 @Component
-public class DagExecutor {
+public class DagScheduler {
 
     private final ToolExecutor toolExecutor;
 
     private final int maxConcurrency;
 
-    public DagExecutor(
+    public DagScheduler(
             ToolExecutor toolExecutor,
             @Value("${harness.execution.max-concurrency:5}") int maxConcurrency) {
         this.toolExecutor = toolExecutor;
@@ -49,21 +44,14 @@ public class DagExecutor {
         requireNonNull(plan, "plan must not be null");
         requireNonNull(budget, "budget must not be null");
         NodeExecutionListener safeListener = listener == null ? NodeExecutionListener.noop() : listener;
+        SchedulerState state = new SchedulerState(plan.nodes());
 
         var executorService = newFixedThreadPool(maxConcurrency);
         try {
-            while (hasPendingNodes(plan)) {
-                if (budget.exhausted()) {
-                    skipBudgetExhaustedPendingNodes(plan);
-                    break;
-                }
-                var readyNodes = readyNodes(plan);
-                if (readyNodes.isEmpty()) {
-                    skipBlockedPendingNodes(plan);
-                    break;
-                }
-                runReadyNodes(plan, budget, executorService, readyNodes, safeListener);
+            for (PlanNode node : state.initialReadyNodes()) {
+                schedule(plan, budget, executorService, state, node, safeListener);
             }
+            state.awaitCompletion();
         } finally {
             executorService.shutdownNow();
         }
@@ -71,38 +59,41 @@ public class DagExecutor {
         return new DagExecutionResult(plan, allDone(plan));
     }
 
-    private void runReadyNodes(
+    private void schedule(
             Plan plan,
             Budget budget,
             ExecutorService executorService,
-            List<PlanNode> readyNodes,
+            SchedulerState state,
+            PlanNode node,
             NodeExecutionListener listener) {
-        var futures = new ArrayList<Future<?>>();
-        for (PlanNode node : readyNodes) {
-            futures.add(executorService.submit(() -> runNode(plan, budget, node, listener)));
+        long startedAt = System.nanoTime();
+        if (!budget.tryChargeToolCall()) {
+            skipNode(plan, budget, executorService, state, node, listener, "budget exhausted", startedAt);
+            return;
         }
-        for (Future<?> future : futures) {
-            try {
-                future.get();
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("DAG execution interrupted", exception);
-            } catch (Exception exception) {
-                throw new IllegalStateException("DAG execution failed unexpectedly", exception);
-            }
+
+        node.setStatus(NodeStatus.RUNNING);
+        listener.onNodeEvent(node, "node.start", null, budget);
+        try {
+            executorService.submit(() -> {
+                runNode(plan, budget, node, listener, startedAt);
+                onNodeCompleted(plan, budget, executorService, state, new NodeExecutionOutcome(node, node.isDone()), listener);
+            });
+        } catch (RejectedExecutionException exception) {
+            node.setError(exception.getMessage());
+            node.setErrorCode(HarnessErrorCode.TOOL_EXECUTION_FAILED);
+            node.setStatus(NodeStatus.FAILED);
+            listener.onNodeEvent(node, "node.fail", elapsedSince(startedAt), budget);
+            onNodeCompleted(plan, budget, executorService, state, new NodeExecutionOutcome(node, false), listener);
         }
     }
 
-    private void runNode(Plan plan, Budget budget, PlanNode node, NodeExecutionListener listener) {
-        long startedAt = System.nanoTime();
-        if (!budget.tryChargeToolCall()) {
-            node.setStatus(SKIPPED);
-            node.setError("budget exhausted");
-            listener.onNodeEvent(node, "node.skip", elapsedSince(startedAt), budget);
-            return;
-        }
-        node.setStatus(NodeStatus.RUNNING);
-        listener.onNodeEvent(node, "node.start", null, budget);
+    private void runNode(
+            Plan plan,
+            Budget budget,
+            PlanNode node,
+            NodeExecutionListener listener,
+            long startedAt) {
         try {
             var args = materializeArguments(plan, node);
             var result = toolExecutor.execute(node.getTool(), args);
@@ -124,6 +115,43 @@ public class DagExecutor {
             node.setStatus(NodeStatus.FAILED);
             listener.onNodeEvent(node, "node.fail", elapsedSince(startedAt), budget);
         }
+    }
+
+    private void onNodeCompleted(
+            Plan plan,
+            Budget budget,
+            ExecutorService executorService,
+            SchedulerState state,
+            NodeExecutionOutcome outcome,
+            NodeExecutionListener listener) {
+        for (PlanNode child : state.dependentsOf(outcome.node())) {
+            int remaining = state.dependencyCompleted(child, outcome.successful());
+            if (remaining != 0) {
+                continue;
+            }
+
+            if (state.hasFailedDependencies(child)) {
+                skipNode(plan, budget, executorService, state, child, listener, "dependency failed", System.nanoTime());
+            } else {
+                schedule(plan, budget, executorService, state, child, listener);
+            }
+        }
+        state.nodeTerminal();
+    }
+
+    private void skipNode(
+            Plan plan,
+            Budget budget,
+            ExecutorService executorService,
+            SchedulerState state,
+            PlanNode node,
+            NodeExecutionListener listener,
+            String error,
+            long startedAt) {
+        node.setStatus(SKIPPED);
+        node.setError(error);
+        listener.onNodeEvent(node, "node.skip", elapsedSince(startedAt), budget);
+        onNodeCompleted(plan, budget, executorService, state, new NodeExecutionOutcome(node, false), listener);
     }
 
     private static Duration elapsedSince(long startedAt) {
@@ -155,39 +183,4 @@ public class DagExecutor {
     private boolean allDone(Plan plan) {
         return plan.nodes().stream().allMatch(PlanNode::isDone);
     }
-
-    private boolean hasBlockedDependency(Plan plan, PlanNode node) {
-        return plan.getDepNodes(node).stream()
-                .anyMatch(dep -> dep != null && List.of(FAILED, SKIPPED, PENDING).contains(dep.getStatus()));
-    }
-
-    private boolean hasPendingNodes(Plan plan) {
-        return plan.nodes().stream().anyMatch(PlanNode::isPending);
-    }
-
-    private List<PlanNode> readyNodes(Plan plan) {
-        return plan.nodes().stream()
-                .filter(node -> node.isPending()
-                        && plan.getDepNodes(node).stream().allMatch(dep -> dep != null && dep.isDone()))
-                .toList();
-    }
-
-    private void skipBlockedPendingNodes(Plan plan) {
-        for (var node : plan.nodes()) {
-            if (node.isPending() && hasBlockedDependency(plan, node)) {
-                node.setStatus(SKIPPED);
-                node.setError("dependency failed");
-            }
-        }
-    }
-
-    private void skipBudgetExhaustedPendingNodes(Plan plan) {
-        for (var node : plan.nodes()) {
-            if (node.isPending()) {
-                node.setStatus(SKIPPED);
-                node.setError("budget exhausted");
-            }
-        }
-    }
-
 }
