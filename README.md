@@ -5,7 +5,7 @@ A Spring Boot 4 demo application that implements an agentic harness with Spring 
 ## Features
 
 - Plans work as a typed DAG and validates it before execution.
-- Executes independent DAG nodes in parallel with a configurable concurrency limit.
+- Executes independent DAG branches as dependencies become ready, with a configurable concurrency limit.
 - Provides deterministic local tools for genre facts, genre reviews, game catalog data, and fake game prices.
 - Uses an LLM-backed summarizer for the final game recommendation report.
 - Tracks budget pressure across tokens, tool calls, wall-clock time, and estimated cost.
