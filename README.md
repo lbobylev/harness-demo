@@ -1,13 +1,13 @@
 # Spring AI Agentic Harness
 
-A Spring Boot 4 demo application that implements an agentic harness with Spring AI 2 and OpenAI. The demo domain recommends computer games by combining local genre facts, review summaries, a local game catalog, fake price data, LLM-backed planning, controlled tool execution, budget tracking, verification, and structured tracing.
+A Spring Boot 4 demo application that implements an agentic incident investigation harness with Spring AI 2 and OpenAI. The demo turns a natural-language incident goal into a typed execution plan, gathers structured evidence through local tools, tests a hypothesis, builds an incident report, tracks budget, verifies the result, and emits structured trace events.
 
 ## Features
 
 - Plans work as a typed DAG and validates it before execution.
+- Applies incident-specific policy validation before execution.
 - Executes independent DAG branches as dependencies become ready, with a configurable concurrency limit.
-- Provides deterministic local tools for genre facts, genre reviews, game catalog data, and fake game prices.
-- Uses an LLM-backed summarizer for the final game recommendation report.
+- Provides deterministic local tools for incident metrics, logs, traces, deployments, config changes, analysis, hypothesis testing, and final report assembly.
 - Tracks budget pressure across tokens, tool calls, wall-clock time, and estimated cost.
 - Emits structured trace events for planning, validation, execution, verification, recovery decisions, and run completion.
 - Returns diagnostic run results for planning, validation, execution, verification, and budget failures.
@@ -54,7 +54,7 @@ Key application settings:
 Run the application with a natural-language goal:
 
 ```bash
-./gradlew bootRun --args="Recommend computer games for someone who likes strategy, exploration, and story-rich RPGs"
+./gradlew bootRun --args="Investigate checkout-service 5xx increase around 14:32 and identify the likely root cause"
 ```
 
 The CLI prints the run status, final report when available, any error message, budget pressure, and trace event count.
@@ -83,11 +83,12 @@ src/main/java/dev/harness
     ├── ai/                          # AI usage extraction
     ├── budget/                      # Budget limits, pricing, and pressure tracking
     ├── execution/                   # DAG execution
+    ├── incident/                    # Synthetic incident data and report models
     ├── orchestration/               # End-to-end run orchestration
     ├── plan/                        # Plan and node models
     ├── planning/                    # Spring AI planner integration
     ├── run/                         # Run result, statuses, and recovery models
-    ├── tools/                       # Game recommendation tools and tool catalog
+    ├── tools/                       # Incident investigation tools and tool catalog
     ├── trace/                       # Structured trace events
     ├── validation/                  # DAG validation
     └── verification/                # Final report verification
@@ -95,6 +96,6 @@ src/main/java/dev/harness
 
 ## Notes
 
-- Final prices are expected to come from deterministic local fake price data, not from model-generated values.
+- Prometheus, Loki, and Tempo tools are synthetic local stubs over `IncidentData`; they do not connect to real observability backends.
 - The current verifier checks that the final synthesis completed and produced a non-blank final report.
 - OpenSpec artifacts for the implementation are stored under `openspec/changes/build-spring-ai-agentic-harness/`.
