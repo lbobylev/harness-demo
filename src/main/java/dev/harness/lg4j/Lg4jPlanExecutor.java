@@ -12,7 +12,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
 
@@ -89,8 +88,8 @@ class Lg4jPlanExecutor {
     }
 
     private boolean dependencyFailed(PlanNode node, Lg4jPlanExecutionState state) {
-        for (String dependencyId : node.getDeps()) {
-            NodeStatus status = state.statuses().get(dependencyId);
+        for (var dependencyId : node.getDeps()) {
+            var status = state.statuses().get(dependencyId);
             if (status == NodeStatus.FAILED || status == NodeStatus.SKIPPED) {
                 return true;
             }
@@ -119,7 +118,7 @@ class Lg4jPlanExecutor {
         return state.result(value.sourceNodeId());
     }
 
-    record StateParams(
+    private record StateParams(
             Lg4jPlanExecutionState state,
             String nodeId,
             Object result,
@@ -138,28 +137,13 @@ class Lg4jPlanExecutor {
             StateParams params,
             NodeStatus status,
             String error) {
-        var state = params.state();
-        var results = new LinkedHashMap<>(state.results());
         var result = params.result();
         var nodeId = params.nodeId();
-        if (result != null) {
-            results.put(nodeId, result);
-        }
-
-        var statuses = new LinkedHashMap<>(state.statuses());
-        statuses.put(nodeId, status);
-
-        var errors = new LinkedHashMap<>(state.errors());
-        if (error == null || error.isBlank()) {
-            errors.remove(nodeId);
-        } else {
-            errors.put(nodeId, error);
-        }
 
         return Map.of(
-                Lg4jPlanExecutionState.RESULTS, results,
-                Lg4jPlanExecutionState.STATUSES, statuses,
-                Lg4jPlanExecutionState.ERRORS, errors,
+                Lg4jPlanExecutionState.RESULTS, result == null ? Map.of() : Map.of(nodeId, result),
+                Lg4jPlanExecutionState.STATUSES, Map.of(nodeId, status),
+                Lg4jPlanExecutionState.ERRORS, error == null || error.isBlank() ? Map.of() : Map.of(nodeId, error),
                 Lg4jPlanExecutionState.BUDGET, params.budget().snapshot());
     }
 
