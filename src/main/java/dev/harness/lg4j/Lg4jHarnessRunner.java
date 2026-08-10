@@ -30,6 +30,8 @@ public class Lg4jHarnessRunner {
 
     private final Lg4jPlanExecutionNode executionNode;
 
+    private final Lg4jReportNode reportNode;
+
     private final Lg4jVerificationNode verificationNode;
 
     private final Lg4jFinishNode finishNode;
@@ -38,11 +40,13 @@ public class Lg4jHarnessRunner {
             Lg4jPlanNode planNode,
             Lg4jPlanValidationNode validateNode,
             Lg4jPlanExecutionNode executionNode,
+            Lg4jReportNode reportNode,
             Lg4jVerificationNode verificationNode,
             Lg4jFinishNode finishNode) {
         this.planNode = planNode;
         this.validateNode = validateNode;
         this.executionNode = executionNode;
+        this.reportNode = reportNode;
         this.verificationNode = verificationNode;
         this.finishNode = finishNode;
     }
@@ -65,12 +69,14 @@ public class Lg4jHarnessRunner {
                 .addNode("plan", node_async(planNode::plan))
                 .addNode("validate", node_async(validateNode::validate))
                 .addNode("execute", node_async(executionNode::execute))
+                .addNode("build_report", node_async(reportNode::build))
                 .addNode("verify", node_async(verificationNode::verify))
                 .addNode("finish", node_async(finishNode::finish))
                 .addEdge(START, "plan")
                 .addEdge("plan", "validate")
                 .addEdge("validate", "execute")
-                .addEdge("execute", "verify")
+                .addEdge("execute", "build_report")
+                .addEdge("build_report", "verify")
                 .addEdge("verify", "finish")
                 .addEdge("finish", END);
     }

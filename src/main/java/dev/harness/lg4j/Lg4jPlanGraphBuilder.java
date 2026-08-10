@@ -6,10 +6,13 @@ import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
@@ -17,61 +20,101 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 final class Lg4jPlanGraphBuilder {
 
+    static final String ANALYZE_EVIDENCE = "lg4j_analyze_evidence";
+
     private static final String FORK = "lg4j_fork";
-    private static final String BRANCH_PREFIX = "lg4j_branch_";
+    private static final String COMPONENT_PREFIX = "lg4j_component_";
 
     StateGraph<Lg4jPlanExecutionState> build(
             Plan plan,
-            Lg4jPlanShape shape,
-            Function<PlanNode, AsyncNodeAction<Lg4jPlanExecutionState>> nodeAction) throws GraphStateException {
+            Function<PlanNode, AsyncNodeAction<Lg4jPlanExecutionState>> nodeAction,
+            AsyncNodeAction<Lg4jPlanExecutionState> analyzeEvidence) throws GraphStateException {
         var graph = new StateGraph<>(Lg4jPlanExecutionState.SCHEMA, Lg4jPlanExecutionState::new);
-        var nodesById = nodesById(plan);
+        var nodesById = Lg4jPlanDag.nodesById(plan);
 
         graph.addNode(FORK, node_async(state -> Map.of()));
         graph.addEdge(START, FORK);
+        graph.addNode(ANALYZE_EVIDENCE, analyzeEvidence);
 
-        for (int i = 0; i < shape.branches().size(); i++) {
-            var branchId = BRANCH_PREFIX + i;
-            graph.addNode(branchId, branchGraph(shape.branches().get(i), nodesById, nodeAction).compile());
-            graph.addEdge(FORK, branchId);
-            graph.addEdge(branchId, shape.tail().getFirst());
+        var components = components(plan, nodesById);
+        for (int i = 0; i < components.size(); i++) {
+            var componentId = COMPONENT_PREFIX + i;
+            graph.addNode(componentId, componentGraph(components.get(i), nodesById, nodeAction).compile());
+            graph.addEdge(FORK, componentId);
+            graph.addEdge(componentId, ANALYZE_EVIDENCE);
         }
 
-        for (var nodeId : shape.tail()) {
-            graph.addNode(nodeId, nodeAction.apply(requireNode(nodesById, nodeId)));
-        }
-
-        for (int i = 1; i < shape.tail().size(); i++) {
-            graph.addEdge(shape.tail().get(i - 1), shape.tail().get(i));
-        }
-
-        graph.addEdge(shape.tail().getLast(), END);
+        graph.addEdge(ANALYZE_EVIDENCE, END);
         return graph;
     }
 
-    private StateGraph<Lg4jPlanExecutionState> branchGraph(
-            List<String> branch,
+    private StateGraph<Lg4jPlanExecutionState> componentGraph(
+            Set<String> component,
             Map<String, PlanNode> nodesById,
             Function<PlanNode, AsyncNodeAction<Lg4jPlanExecutionState>> nodeAction) throws GraphStateException {
-        if (branch.isEmpty()) {
-            throw new IllegalArgumentException("plan branch must not be empty");
-        }
-
         var graph = new StateGraph<>(Lg4jPlanExecutionState.SCHEMA, Lg4jPlanExecutionState::new);
-        for (var nodeId : branch) {
-            graph.addNode(nodeId, nodeAction.apply(requireNode(nodesById, nodeId)));
+        var nodes = component.stream().map(nodeId -> requireNode(nodesById, nodeId)).toList();
+
+        for (var node : nodes) {
+            graph.addNode(node.getId(), nodeAction.apply(node));
         }
 
-        graph.addEdge(START, branch.getFirst());
-        for (int i = 1; i < branch.size(); i++) {
-            graph.addEdge(branch.get(i - 1), branch.get(i));
+        for (var node : nodes) {
+            if (node.getDeps().isEmpty()) {
+                graph.addEdge(START, node.getId());
+            }
+            for (var dependencyId : node.getDeps()) {
+                if (component.contains(dependencyId)) {
+                    graph.addEdge(dependencyId, node.getId());
+                }
+            }
         }
-        graph.addEdge(branch.getLast(), END);
+
+        var dependencyIds = new HashSet<String>();
+        nodes.forEach(node -> dependencyIds.addAll(node.getDeps()));
+        for (var node : nodes) {
+            if (!dependencyIds.contains(node.getId())) {
+                graph.addEdge(node.getId(), END);
+            }
+        }
+
         return graph;
     }
 
-    private Map<String, PlanNode> nodesById(Plan plan) {
-        return plan.nodes().stream().collect(Collectors.toMap(PlanNode::getId, Function.identity()));
+    private List<Set<String>> components(Plan plan, Map<String, PlanNode> nodesById) {
+        var remaining = new HashSet<String>(nodesById.keySet());
+        var components = new ArrayList<Set<String>>();
+        while (!remaining.isEmpty()) {
+            var start = remaining.iterator().next();
+            var component = new HashSet<String>();
+            var queue = new ArrayDeque<String>();
+            queue.add(start);
+            remaining.remove(start);
+
+            while (!queue.isEmpty()) {
+                var nodeId = queue.removeFirst();
+                component.add(nodeId);
+                for (var neighbor : neighbors(plan, nodesById, nodeId)) {
+                    if (remaining.remove(neighbor)) {
+                        queue.add(neighbor);
+                    }
+                }
+            }
+            components.add(component);
+        }
+        return components;
+    }
+
+    private Set<String> neighbors(Plan plan, Map<String, PlanNode> nodesById, String nodeId) {
+        var neighbors = new HashSet<String>();
+        var node = requireNode(nodesById, nodeId);
+        neighbors.addAll(node.getDeps());
+        for (var candidate : plan.nodes()) {
+            if (candidate.getDeps().contains(nodeId)) {
+                neighbors.add(candidate.getId());
+            }
+        }
+        return neighbors;
     }
 
     private PlanNode requireNode(Map<String, PlanNode> nodesById, String nodeId) {

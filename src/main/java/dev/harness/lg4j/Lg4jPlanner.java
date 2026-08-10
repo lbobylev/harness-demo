@@ -11,24 +11,10 @@ class Lg4jPlanner {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(Lg4jPlanner.class);
 
-    private static final String TOOLS = """
-            query_prometheus(service, metric, from, to) -> PrometheusQueryResult role=EVIDENCE
-            query_loki(service, query, from, to) -> LokiQueryResult role=EVIDENCE
-            query_tempo(service, query, from, to) -> TempoQueryResult role=EVIDENCE
-            get_deployments(service, from, to) -> List<DeploymentEvent> role=EVIDENCE
-            get_config_changes(service, from, to) -> List<ConfigChange> role=EVIDENCE
-            compare_periods(metricSeries, baselineFrom, baselineTo, incidentFrom, incidentTo) -> PeriodComparison role=ANALYSIS
-            find_log_signature(logs) -> LogSignature role=ANALYSIS
-            assemble_evidence(metricComparison, logSignature, traces, deployments, configChanges) -> EvidenceBundle role=ANALYSIS
-            correlate(evidence) -> CorrelationResult role=ANALYSIS
-            test_hypothesis(hypothesis, evidence) -> HypothesisAssessment role=HYPOTHESIS_TEST
-            build_incident_report(incident, hypothesisAssessment, evidence) -> IncidentReport role=FINAL_SYNTHESIS
-            """;
-
     private static final String SYSTEM_PROMPT = """
             You are a planner for an incident investigation harness.
 
-            Compile the user's incident goal into a dependency graph of tool calls.
+            Compile the user's incident goal into an evidence DAG.
             Return only the structured Plan object requested by the API.
 
             Rules:
@@ -40,7 +26,13 @@ class Lg4jPlanner {
             - Use NODE_RESULT for values produced by another node.
             - Every NODE_RESULT sourceNodeId must also appear in deps.
             - Every required tool argument from the catalog must appear explicitly.
-            - Use build_incident_report exactly once as the final synthesis tool.
+            - Return only evidence collection and local evidence analysis before fan-in.
+            - Read terminal=true or terminal=false from AVAILABLE TOOLS.
+            - The Plan may contain any acyclic dependency graph over AVAILABLE TOOLS.
+            - Every terminal node must use a tool marked terminal=true.
+            - Tools marked terminal=false may only be intermediate DAG nodes.
+            - Do not create tools or runtime synthesis/report nodes that are not listed in AVAILABLE TOOLS.
+            - The runtime will fan in all terminal nodes, then deterministically analyze evidence and build the report.
             - Do not return Java code or a generic action protocol.
             """;
 
@@ -79,7 +71,7 @@ class Lg4jPlanner {
 
                 AVAILABLE TOOLS:
                 %s
-                """.formatted(goal, TOOLS);
+                """.formatted(goal, Lg4jToolSpecs.promptCatalog());
         if (failureContext == null || failureContext.isBlank()) {
             return prompt;
         }

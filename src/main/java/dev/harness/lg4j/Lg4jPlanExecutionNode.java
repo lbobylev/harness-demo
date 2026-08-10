@@ -4,6 +4,7 @@ import dev.harness.agent.budget.Budget;
 import dev.harness.agent.budget.BudgetLimits;
 import dev.harness.agent.budget.ModelPricing;
 import dev.harness.agent.plan.Plan;
+import dev.harness.agent.plan.NodeStatus;
 import dev.harness.agent.run.ErrorClass;
 import dev.harness.agent.run.RunStatus;
 
@@ -48,15 +49,12 @@ class Lg4jPlanExecutionNode {
         if (plan == null) {
             return failure("plan must not be null");
         }
-        var shape = state.planShape().orElse(null);
-        if (shape == null) {
-            return failure("plan shape must not be null");
-        }
 
         var budget = new Budget(budgetLimits, modelPricing);
         try {
-            var executionState = planExecutor.execute(plan, shape, budget);
+            var executionState = planExecutor.execute(plan, budget);
             applyExecutionState(plan, executionState);
+            var analysis = finalAnalysis(executionState);
 
             if (budget.exhausted()) {
                 return Map.of(
@@ -66,7 +64,7 @@ class Lg4jPlanExecutionNode {
                         Lg4jRunState.ERROR_CLASS, ErrorClass.FATAL,
                         Lg4jRunState.ERROR, "budget exhausted after execution");
             }
-            if (hasFailedOrSkippedNode(plan)) {
+            if (hasFailedOrSkippedNode(plan) || hasFailedOrSkippedRuntimeTail(executionState)) {
                 return Map.of(
                         Lg4jRunState.PLAN, plan,
                         Lg4jRunState.BUDGET, budget.snapshot(),
@@ -74,9 +72,18 @@ class Lg4jPlanExecutionNode {
                         Lg4jRunState.ERROR_CLASS, ErrorClass.FATAL,
                         Lg4jRunState.ERROR, "execution failed");
             }
+            if (analysis == null) {
+                return Map.of(
+                        Lg4jRunState.PLAN, plan,
+                        Lg4jRunState.BUDGET, budget.snapshot(),
+                        Lg4jRunState.STATUS, RunStatus.FAILED_EXECUTION,
+                        Lg4jRunState.ERROR_CLASS, ErrorClass.FATAL,
+                        Lg4jRunState.ERROR, "incident analysis was not produced");
+            }
 
             return Map.of(
                     Lg4jRunState.PLAN, plan,
+                    Lg4jRunState.INCIDENT_ANALYSIS, analysis,
                     Lg4jRunState.BUDGET, budget.snapshot());
         } catch (Exception exception) {
             log.warn("LangGraph4j plan execution failed: plan={} error={}",
@@ -100,6 +107,23 @@ class Lg4jPlanExecutionNode {
 
     private boolean hasFailedOrSkippedNode(Plan plan) {
         return plan.nodes().stream().anyMatch(node -> node != null && (node.isFailed() || node.isSkipped()));
+    }
+
+    private boolean hasFailedOrSkippedRuntimeTail(Lg4jPlanExecutionState executionState) {
+        return isFailedOrSkipped(executionState, Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE);
+    }
+
+    private boolean isFailedOrSkipped(Lg4jPlanExecutionState executionState, String nodeId) {
+        var status = executionState.statuses().get(nodeId);
+        return status == NodeStatus.FAILED || status == NodeStatus.SKIPPED;
+    }
+
+    private Lg4jIncidentAnalysis finalAnalysis(Lg4jPlanExecutionState executionState) {
+        var result = executionState.result(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE);
+        if (result instanceof Lg4jIncidentAnalysis analysis) {
+            return analysis;
+        }
+        return null;
     }
 
     private Map<String, Object> failure(String error) {

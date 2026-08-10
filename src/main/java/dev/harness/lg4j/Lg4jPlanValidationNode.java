@@ -12,12 +12,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import static dev.harness.agent.tools.IncidentInvestigationTools.BUILD_INCIDENT_REPORT;
-
 @Component
 class Lg4jPlanValidationNode {
-
-    private final Lg4jPlanShapeAnalyzer shapeAnalyzer = new Lg4jPlanShapeAnalyzer();
 
     Map<String, Object> validate(Lg4jRunState state) {
         if (state.terminal()) {
@@ -29,11 +25,7 @@ class Lg4jPlanValidationNode {
             return validationFailed(error);
         }
 
-        try {
-            return Map.of(Lg4jRunState.PLAN_SHAPE, shapeAnalyzer.analyze(state.plan().orElseThrow()));
-        } catch (IllegalArgumentException exception) {
-            return validationFailed(exception.getMessage());
-        }
+        return Map.of();
     }
 
     private Map<String, Object> validationFailed(String error) {
@@ -67,6 +59,9 @@ class Lg4jPlanValidationNode {
             if (node.getTool() == null || node.getTool().isBlank()) {
                 return "plan node tool must not be blank: " + node.getId();
             }
+            if (!Lg4jToolSpecs.names().contains(node.getTool())) {
+                return "unknown evidence tool: " + node.getTool();
+            }
             nodesById.put(node.getId(), node);
         }
 
@@ -82,20 +77,14 @@ class Lg4jPlanValidationNode {
             return cycleError;
         }
 
-        long finalReports = plan.nodes().stream()
-                .filter(node -> BUILD_INCIDENT_REPORT.equals(node.getTool()))
-                .count();
-        if (finalReports != 1) {
-            return "plan must contain exactly one build_incident_report node";
-        }
-
         var terminalNodes = terminalNodes(plan);
-        if (terminalNodes.size() != 1) {
-            return "plan must contain exactly one terminal node";
+        if (terminalNodes.isEmpty()) {
+            return "plan must contain at least one terminal evidence node";
         }
-        var terminalNode = terminalNodes.iterator().next();
-        if (!BUILD_INCIDENT_REPORT.equals(terminalNode.getTool())) {
-            return "terminal node must be build_incident_report";
+        for (var terminalNode : terminalNodes) {
+            if (!Lg4jToolSpecs.terminalNames().contains(terminalNode.getTool())) {
+                return "terminal evidence node must produce analysis-ready evidence: " + terminalNode.getId();
+            }
         }
 
         return null;

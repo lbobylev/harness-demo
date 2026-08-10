@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 class Lg4jPlanGraphBuilderTests {
@@ -20,18 +19,10 @@ class Lg4jPlanGraphBuilderTests {
     private final Lg4jPlanGraphBuilder builder = new Lg4jPlanGraphBuilder();
 
     @Test
-    void buildsBranchSubgraphsIntoSharedJoin() throws Exception {
+    void buildsEvidenceDagIntoSharedJoin() throws Exception {
         var plan = structuredPlan();
 
-        var state = invoke(plan, structuredShape(), node -> node_async(current -> {
-            if ("assemble".equals(node.getId())) {
-                assertThat(current.statuses())
-                        .containsEntry("compare", NodeStatus.DONE)
-                        .containsEntry("signature", NodeStatus.DONE)
-                        .containsEntry("traces", NodeStatus.DONE);
-            }
-            return done(node);
-        }));
+        var state = invoke(plan, doneAction());
 
         assertThat(state.statuses())
                 .containsEntry("metrics", NodeStatus.DONE)
@@ -39,17 +30,14 @@ class Lg4jPlanGraphBuilderTests {
                 .containsEntry("logs", NodeStatus.DONE)
                 .containsEntry("signature", NodeStatus.DONE)
                 .containsEntry("traces", NodeStatus.DONE)
-                .containsEntry("assemble", NodeStatus.DONE)
-                .containsEntry("correlate", NodeStatus.DONE)
-                .containsEntry("test", NodeStatus.DONE)
-                .containsEntry("report", NodeStatus.DONE);
+                .containsEntry(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE, NodeStatus.DONE);
     }
 
     @Test
-    void propagatesBranchFailuresThroughTailDependencies() throws Exception {
+    void propagatesEvidenceDagFailuresThroughTailDependencies() throws Exception {
         var plan = structuredPlan();
 
-        var state = invoke(plan, structuredShape(), node -> node_async(current -> {
+        var state = invoke(plan, node -> node_async(current -> {
             if ("metrics".equals(node.getId())) {
                 return Map.of(
                         Lg4jPlanExecutionState.STATUSES, Map.of("metrics", NodeStatus.FAILED),
@@ -69,36 +57,49 @@ class Lg4jPlanGraphBuilderTests {
         assertThat(state.statuses())
                 .containsEntry("metrics", NodeStatus.FAILED)
                 .containsEntry("compare", NodeStatus.SKIPPED)
-                .containsEntry("assemble", NodeStatus.SKIPPED)
-                .containsEntry("correlate", NodeStatus.SKIPPED)
-                .containsEntry("test", NodeStatus.SKIPPED)
-                .containsEntry("report", NodeStatus.SKIPPED);
+                .containsEntry(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE, NodeStatus.SKIPPED);
     }
 
     @Test
-    void failsForUnknownShapeNode() {
-        var shape = new Lg4jPlanShape(List.of(List.of("missing")), List.of("report"));
-        var plan = new Plan(List.of(node("report", "build_incident_report")));
+    void supportsFanInWithinEvidenceDag() throws Exception {
+        var plan = new Plan(List.of(
+                node("metrics", "query_prometheus"),
+                node("logs", "query_loki"),
+                node("mixed", "compare_periods", "metrics", "logs")));
 
-        assertThatThrownBy(() -> compile(plan, shape, doneAction()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("missing");
+        var state = invoke(plan, doneAction());
+
+        assertThat(state.statuses())
+                .containsEntry("metrics", NodeStatus.DONE)
+                .containsEntry("logs", NodeStatus.DONE)
+                .containsEntry("mixed", NodeStatus.DONE)
+                .containsEntry(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE, NodeStatus.DONE);
     }
 
     private Lg4jPlanExecutionState invoke(
             Plan plan,
-            Lg4jPlanShape shape,
             java.util.function.Function<PlanNode, AsyncNodeAction<Lg4jPlanExecutionState>> action) throws Exception {
-        return compile(plan, shape, action)
+        return compile(plan, action)
                 .invoke(initialState())
                 .orElseThrow(() -> new IllegalStateException("graph returned no final state"));
     }
 
     private CompiledGraph<Lg4jPlanExecutionState> compile(
             Plan plan,
-            Lg4jPlanShape shape,
             java.util.function.Function<PlanNode, AsyncNodeAction<Lg4jPlanExecutionState>> action) throws Exception {
-        StateGraph<Lg4jPlanExecutionState> graph = builder.build(plan, shape, action);
+        StateGraph<Lg4jPlanExecutionState> graph = builder.build(plan, action,
+                node_async(state -> {
+                    if (state.statuses().containsValue(NodeStatus.FAILED)
+                            || state.statuses().containsValue(NodeStatus.SKIPPED)) {
+                        return Map.of(
+                                Lg4jPlanExecutionState.STATUSES,
+                                Map.of(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE, NodeStatus.SKIPPED));
+                    }
+                    for (var terminal : Lg4jPlanDag.terminals(plan)) {
+                        assertThat(state.statuses()).containsEntry(terminal.getId(), NodeStatus.DONE);
+                    }
+                    return done(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE);
+                }));
         return graph.compile();
     }
 
@@ -107,7 +108,11 @@ class Lg4jPlanGraphBuilderTests {
     }
 
     private static Map<String, Object> done(PlanNode node) {
-        return Map.of(Lg4jPlanExecutionState.STATUSES, Map.of(node.getId(), NodeStatus.DONE));
+        return done(node.getId());
+    }
+
+    private static Map<String, Object> done(String nodeId) {
+        return Map.of(Lg4jPlanExecutionState.STATUSES, Map.of(nodeId, NodeStatus.DONE));
     }
 
     private static Map<String, Object> initialState() {
@@ -124,18 +129,8 @@ class Lg4jPlanGraphBuilderTests {
                 node("compare", "compare_periods", "metrics"),
                 node("logs", "query_loki"),
                 node("signature", "find_log_signature", "logs"),
-                node("traces", "query_tempo"),
-                node("assemble", "assemble_evidence", "compare", "signature", "traces"),
-                node("correlate", "correlate", "assemble"),
-                node("test", "test_hypothesis", "correlate"),
-                node("report", "build_incident_report", "test")
+                node("traces", "query_tempo")
         ));
-    }
-
-    private static Lg4jPlanShape structuredShape() {
-        return new Lg4jPlanShape(
-                List.of(List.of("metrics", "compare"), List.of("logs", "signature"), List.of("traces")),
-                List.of("assemble", "correlate", "test", "report"));
     }
 
     private static PlanNode node(String id, String tool, String... deps) {

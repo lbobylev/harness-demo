@@ -23,22 +23,22 @@ class Lg4jPlanExecutor {
     private static final String BUDGET_EXHAUSTED = "budget exhausted";
 
     private final Lg4jToolExecutor toolExecutor;
+    private final Lg4jEvidenceAnalysisNode evidenceAnalysisNode;
     private final int maxConcurrency;
     private final Lg4jPlanGraphBuilder graphBuilder = new Lg4jPlanGraphBuilder();
 
     Lg4jPlanExecutor(
             Lg4jToolExecutor toolExecutor,
+            Lg4jEvidenceAnalysisNode evidenceAnalysisNode,
             @Value("${harness.execution.max-concurrency:5}") int maxConcurrency) {
         this.toolExecutor = toolExecutor;
+        this.evidenceAnalysisNode = evidenceAnalysisNode;
         this.maxConcurrency = Math.max(1, maxConcurrency);
     }
 
-    Lg4jPlanExecutionState execute(Plan plan, Lg4jPlanShape shape, Budget budget) {
+    Lg4jPlanExecutionState execute(Plan plan, Budget budget) {
         if (plan == null) {
             throw new IllegalArgumentException("plan must not be null");
-        }
-        if (shape == null) {
-            throw new IllegalArgumentException("plan shape must not be null");
         }
         if (budget == null) {
             throw new IllegalArgumentException("budget must not be null");
@@ -46,7 +46,9 @@ class Lg4jPlanExecutor {
         try {
             var semaphore = new Semaphore(maxConcurrency);
             return graphBuilder
-                    .build(plan, shape, node -> node_async(state -> executeNode(budget, semaphore, node, state)))
+                    .build(plan,
+                            node -> node_async(state -> executeNode(budget, semaphore, node, state)),
+                            node_async(state -> evidenceAnalysisNode.analyze(plan, state)))
                     .compile()
                     .invoke(initialState(budget))
                     .orElseThrow(() -> new IllegalStateException("LangGraph4j plan graph returned no final state"));
@@ -143,12 +145,18 @@ class Lg4jPlanExecutor {
             String error) {
         var result = params.result();
         var nodeId = params.nodeId();
+        var budget = params.budget();
 
-        return Map.of(
-                Lg4jPlanExecutionState.RESULTS, result == null ? Map.of() : Map.of(nodeId, result),
-                Lg4jPlanExecutionState.STATUSES, Map.of(nodeId, status),
-                Lg4jPlanExecutionState.ERRORS, error == null || error.isBlank() ? Map.of() : Map.of(nodeId, error),
-                Lg4jPlanExecutionState.BUDGET, params.budget().snapshot());
+        var update = new HashMap<String, Object>();
+        update.put(Lg4jPlanExecutionState.RESULTS, result == null ? Map.of() : Map.of(nodeId, result));
+        update.put(Lg4jPlanExecutionState.STATUSES, Map.of(nodeId, status));
+        update.put(Lg4jPlanExecutionState.ERRORS, error == null || error.isBlank() ? Map.of() : Map.of(nodeId, error));
+        if (budget != null) {
+            update.put(Lg4jPlanExecutionState.BUDGET, budget.snapshot());
+        } else {
+            params.state().budget().ifPresent(snapshot -> update.put(Lg4jPlanExecutionState.BUDGET, snapshot));
+        }
+        return update;
     }
 
     private Map<String, Object> initialState(Budget budget) {
