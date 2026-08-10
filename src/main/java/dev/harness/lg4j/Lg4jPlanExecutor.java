@@ -46,8 +46,7 @@ class Lg4jPlanExecutor {
                     .build(plan, node -> node_async(state -> executeNode(budget, semaphore, node, state)))
                     .compile()
                     .invoke(initialState(budget))
-                    .orElseThrow(
-                            () -> new IllegalStateException("LangGraph4j plan graph returned no final state"));
+                    .orElseThrow(() -> new IllegalStateException("LangGraph4j plan graph returned no final state"));
         } catch (GraphStateException exception) {
             throw new IllegalStateException("failed to build LangGraph4j plan graph", exception);
         }
@@ -153,5 +152,4 @@ class Lg4jPlanExecutor {
                 Lg4jPlanExecutionState.ERRORS, Map.of(),
                 Lg4jPlanExecutionState.BUDGET, budget.snapshot());
     }
-
 }

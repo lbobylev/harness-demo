@@ -26,9 +26,15 @@ public class Lg4jHarnessRunner {
 
     private final Lg4jPlanValidationNode validateNode;
 
-    public Lg4jHarnessRunner(Lg4jPlanNode planNode, Lg4jPlanValidationNode validateNode) {
+    private final Lg4jPlanExecutionNode executionNode;
+
+    public Lg4jHarnessRunner(
+            Lg4jPlanNode planNode,
+            Lg4jPlanValidationNode validateNode,
+            Lg4jPlanExecutionNode executionNode) {
         this.planNode = planNode;
         this.validateNode = validateNode;
+        this.executionNode = executionNode;
     }
 
     public RunResult run(RunRequest request) {
@@ -47,7 +53,7 @@ public class Lg4jHarnessRunner {
         return new StateGraph<>(Lg4jRunState.SCHEMA, Lg4jRunState::new)
                 .addNode("plan", node_async(planNode::plan))
                 .addNode("validate", node_async(validateNode::validate))
-                .addNode("execute", node_async(this::execute))
+                .addNode("execute", node_async(executionNode::execute))
                 .addNode("verify", node_async(state -> Map.of()))
                 .addNode("finish", node_async(state -> Map.of()))
                 .addEdge(START, "plan")
@@ -56,16 +62,6 @@ public class Lg4jHarnessRunner {
                 .addEdge("execute", "verify")
                 .addEdge("verify", "finish")
                 .addEdge("finish", END);
-    }
-
-    private Map<String, Object> execute(Lg4jRunState state) {
-        if (state.terminal()) {
-            return Map.of();
-        }
-        return Map.of(
-                Lg4jRunState.STATUS, RunStatus.FAILED_EXECUTION,
-                Lg4jRunState.ERROR, PLAN_EXECUTOR_NOT_IMPLEMENTED
-        );
     }
 
     private static Map<String, Object> initialState(RunRequest request) {
@@ -89,7 +85,7 @@ public class Lg4jHarnessRunner {
                 null,
                 state.plan().orElse(null),
                 List.of(),
-                null
+                state.budget().orElse(null)
         );
     }
 }
