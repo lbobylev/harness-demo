@@ -2,6 +2,7 @@ package dev.harness.agent.incident;
 
 import dev.harness.agent.verification.FinalReport;
 
+import java.io.Serializable;
 import java.util.List;
 
 public record IncidentReport(
@@ -11,7 +12,7 @@ public record IncidentReport(
         List<String> evidence,
         List<String> rejectedHypotheses,
         String recommendedAction
-) implements FinalReport {
+) implements FinalReport, Serializable {
     public IncidentReport {
         timeline = timeline == null ? List.of() : List.copyOf(timeline);
         evidence = evidence == null ? List.of() : List.copyOf(evidence);

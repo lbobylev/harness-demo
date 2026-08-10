@@ -1,5 +1,7 @@
 package dev.harness.agent.incident;
 
+import java.io.Serializable;
+
 public record TraceSpan(
         String id,
         String traceId,
@@ -11,5 +13,5 @@ public record TraceSpan(
         long durationMs,
         String status,
         String error
-) {
+) implements Serializable {
 }

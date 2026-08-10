@@ -1,5 +1,6 @@
 package dev.harness.agent.incident;
 
+import java.io.Serializable;
 import java.util.List;
 
 public record EvidenceBundle(
@@ -9,7 +10,7 @@ public record EvidenceBundle(
         List<DeploymentEvent> deployments,
         List<ConfigChange> configChanges,
         List<String> evidenceIds
-) {
+) implements Serializable {
     public EvidenceBundle {
         metricComparisons = metricComparisons == null ? List.of() : List.copyOf(metricComparisons);
         logSignatures = logSignatures == null ? List.of() : List.copyOf(logSignatures);

@@ -6,7 +6,6 @@ import dev.harness.agent.plan.ArgumentValueType;
 import dev.harness.agent.plan.NodeStatus;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.plan.PlanNode;
-import dev.harness.agent.tools.ToolExecutor;
 import org.bsc.langgraph4j.GraphStateException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -23,12 +22,12 @@ class Lg4jPlanExecutor {
     private static final String DEPENDENCY_FAILED = "dependency failed";
     private static final String BUDGET_EXHAUSTED = "budget exhausted";
 
-    private final ToolExecutor toolExecutor;
+    private final Lg4jToolExecutor toolExecutor;
     private final int maxConcurrency;
     private final Lg4jPlanGraphBuilder graphBuilder = new Lg4jPlanGraphBuilder();
 
     Lg4jPlanExecutor(
-            ToolExecutor toolExecutor,
+            Lg4jToolExecutor toolExecutor,
             @Value("${harness.execution.max-concurrency:5}") int maxConcurrency) {
         this.toolExecutor = toolExecutor;
         this.maxConcurrency = Math.max(1, maxConcurrency);

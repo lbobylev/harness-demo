@@ -1,5 +1,6 @@
 package dev.harness.agent.incident;
 
+import java.io.Serializable;
 import java.util.List;
 
 public record CorrelationResult(
@@ -7,7 +8,7 @@ public record CorrelationResult(
         List<String> correlations,
         List<String> contradictions,
         List<String> evidenceIds
-) {
+) implements Serializable {
     public CorrelationResult {
         timeline = timeline == null ? List.of() : List.copyOf(timeline);
         correlations = correlations == null ? List.of() : List.copyOf(correlations);

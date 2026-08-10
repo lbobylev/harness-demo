@@ -1,5 +1,6 @@
 package dev.harness.agent.incident;
 
+import java.io.Serializable;
 import java.util.List;
 
 public record MetricSeries(
@@ -7,7 +8,7 @@ public record MetricSeries(
         String service,
         String metric,
         List<MetricPoint> points
-) {
+) implements Serializable {
     public MetricSeries {
         points = points == null ? List.of() : List.copyOf(points);
     }
