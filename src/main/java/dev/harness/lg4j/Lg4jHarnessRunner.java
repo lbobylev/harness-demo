@@ -20,8 +20,6 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 @Component
 public class Lg4jHarnessRunner {
 
-    private static final String PLAN_EXECUTOR_NOT_IMPLEMENTED = "LangGraph4j plan executor is not implemented yet";
-
     private final Lg4jPlanNode planNode;
 
     private final Lg4jPlanValidationNode validateNode;
@@ -30,22 +28,26 @@ public class Lg4jHarnessRunner {
 
     private final Lg4jVerificationNode verificationNode;
 
+    private final Lg4jFinishNode finishNode;
+
     public Lg4jHarnessRunner(
             Lg4jPlanNode planNode,
             Lg4jPlanValidationNode validateNode,
             Lg4jPlanExecutionNode executionNode,
-            Lg4jVerificationNode verificationNode) {
+            Lg4jVerificationNode verificationNode,
+            Lg4jFinishNode finishNode) {
         this.planNode = planNode;
         this.validateNode = validateNode;
         this.executionNode = executionNode;
         this.verificationNode = verificationNode;
+        this.finishNode = finishNode;
     }
 
     public RunResult run(RunRequest request) {
         try {
             var finalState = graph().compile().invoke(initialState(request)).orElseThrow(
                     () -> new IllegalStateException("LangGraph4j run graph returned no final state"));
-            return failureResult(finalState);
+            return result(finalState);
         } catch (Exception exception) {
             return new RunResult(UUID.randomUUID().toString(), request == null ? null : request.sessionId(),
                     RunStatus.FAILED_EXECUTION, null, exception.getMessage(), ErrorClass.FATAL,
@@ -59,7 +61,7 @@ public class Lg4jHarnessRunner {
                 .addNode("validate", node_async(validateNode::validate))
                 .addNode("execute", node_async(executionNode::execute))
                 .addNode("verify", node_async(verificationNode::verify))
-                .addNode("finish", node_async(state -> Map.of()))
+                .addNode("finish", node_async(finishNode::finish))
                 .addEdge(START, "plan")
                 .addEdge("plan", "validate")
                 .addEdge("validate", "execute")
@@ -78,13 +80,13 @@ public class Lg4jHarnessRunner {
         return state;
     }
 
-    private static RunResult failureResult(Lg4jRunState state) {
+    private static RunResult result(Lg4jRunState state) {
         return new RunResult(
                 state.runId().orElseGet(() -> UUID.randomUUID().toString()),
                 state.sessionId().orElse(null),
                 state.status().orElse(RunStatus.FAILED_EXECUTION),
                 state.report().orElse(null),
-                state.error().orElse(null),
+                state.error().orElse(Lg4jFinishNode.MISSING_TERMINAL_STATUS),
                 state.errorClass().orElse(ErrorClass.FATAL),
                 state.verdict().orElse(null),
                 state.plan().orElse(null),
