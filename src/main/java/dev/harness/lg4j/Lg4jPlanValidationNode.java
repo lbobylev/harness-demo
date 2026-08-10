@@ -78,7 +78,30 @@ class Lg4jPlanValidationNode {
             return "plan must contain exactly one build_incident_report node";
         }
 
+        var terminalNodes = terminalNodes(plan);
+        if (terminalNodes.size() != 1) {
+            return "plan must contain exactly one terminal node";
+        }
+        var terminalNode = terminalNodes.iterator().next();
+        if (!BUILD_INCIDENT_REPORT.equals(terminalNode.getTool())) {
+            return "terminal node must be build_incident_report";
+        }
+
         return null;
+    }
+
+    private static Set<PlanNode> terminalNodes(Plan plan) {
+        var dependencyIds = new HashSet<String>();
+        for (var node : plan.nodes()) {
+            dependencyIds.addAll(node.getDeps());
+        }
+        var terminals = new HashSet<PlanNode>();
+        for (var node : plan.nodes()) {
+            if (!dependencyIds.contains(node.getId())) {
+                terminals.add(node);
+            }
+        }
+        return terminals;
     }
 
     private static String validateDependencies(PlanNode node, Set<String> ids) {

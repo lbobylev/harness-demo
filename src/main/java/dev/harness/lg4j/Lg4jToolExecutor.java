@@ -12,7 +12,6 @@ import dev.harness.agent.incident.PrometheusQueryResult;
 import dev.harness.agent.incident.TempoQueryResult;
 import dev.harness.agent.tools.ToolExecutionException;
 import dev.harness.agent.tools.ToolExecutionResult;
-import dev.harness.agent.tools.ToolExecutor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -51,7 +50,7 @@ import static dev.harness.agent.tools.IncidentInvestigationTools.QUERY_TEMPO;
 import static dev.harness.agent.tools.IncidentInvestigationTools.TEST_HYPOTHESIS;
 
 @Component
-class Lg4jToolExecutor implements ToolExecutor {
+class Lg4jToolExecutor {
 
     private final Lg4jTools tools;
 
@@ -59,8 +58,7 @@ class Lg4jToolExecutor implements ToolExecutor {
         this.tools = tools;
     }
 
-    @Override
-    public ToolExecutionResult execute(String name, Map<String, Object> args) {
+    ToolExecutionResult execute(String name, Map<String, Object> args) {
         var safeArgs = args == null ? Map.<String, Object>of() : args;
         return switch (name) {
             case QUERY_PROMETHEUS -> ToolExecutionResult.of(tools.queryPrometheus(

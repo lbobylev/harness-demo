@@ -6,6 +6,8 @@ import dev.harness.agent.run.RunResult;
 import dev.harness.agent.run.RunStatus;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -19,6 +21,8 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 @Component
 public class Lg4jHarnessRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(Lg4jHarnessRunner.class);
 
     private final Lg4jPlanNode planNode;
 
@@ -49,8 +53,9 @@ public class Lg4jHarnessRunner {
                     () -> new IllegalStateException("LangGraph4j run graph returned no final state"));
             return result(finalState);
         } catch (Exception exception) {
+            log.warn("LangGraph4j run failed: {}", Lg4jDebugValue.dump(exception), exception);
             return new RunResult(UUID.randomUUID().toString(), request == null ? null : request.sessionId(),
-                    RunStatus.FAILED_EXECUTION, null, exception.getMessage(), ErrorClass.FATAL,
+                    RunStatus.FAILED_EXECUTION, null, Lg4jDebugValue.dump(exception), ErrorClass.FATAL,
                     null, null, List.of(), null);
         }
     }

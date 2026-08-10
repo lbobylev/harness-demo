@@ -48,7 +48,10 @@ class Lg4jPlanExecutor {
                     .invoke(initialState(budget))
                     .orElseThrow(() -> new IllegalStateException("LangGraph4j plan graph returned no final state"));
         } catch (GraphStateException exception) {
-            throw new IllegalStateException("failed to build LangGraph4j plan graph", exception);
+            throw new IllegalStateException(
+                    "failed to build LangGraph4j plan graph: plan=%s error=%s"
+                            .formatted(Lg4jDebugValue.dump(plan), Lg4jDebugValue.dump(exception)),
+                    exception);
         }
     }
 

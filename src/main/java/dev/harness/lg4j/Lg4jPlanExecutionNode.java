@@ -7,6 +7,8 @@ import dev.harness.agent.plan.Plan;
 import dev.harness.agent.run.ErrorClass;
 import dev.harness.agent.run.RunStatus;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +18,8 @@ import java.util.Map;
 
 @Component
 class Lg4jPlanExecutionNode {
+
+    private static final Logger log = LoggerFactory.getLogger(Lg4jPlanExecutionNode.class);
 
     private final Lg4jPlanExecutor planExecutor;
     private final BudgetLimits budgetLimits;
@@ -71,11 +75,13 @@ class Lg4jPlanExecutionNode {
                     Lg4jRunState.PLAN, plan,
                     Lg4jRunState.BUDGET, budget.snapshot());
         } catch (Exception exception) {
+            log.warn("LangGraph4j plan execution failed: plan={} error={}",
+                    Lg4jDebugValue.dump(plan), Lg4jDebugValue.dump(exception), exception);
             return Map.of(
                     Lg4jRunState.BUDGET, budget.snapshot(),
                     Lg4jRunState.STATUS, RunStatus.FAILED_EXECUTION,
                     Lg4jRunState.ERROR_CLASS, ErrorClass.FATAL,
-                    Lg4jRunState.ERROR, exception.getMessage() == null ? "execution failed" : exception.getMessage());
+                    Lg4jRunState.ERROR, Lg4jDebugValue.dump(exception));
         }
     }
 
