@@ -48,10 +48,14 @@ class Lg4jPlanExecutionNode {
         if (plan == null) {
             return failure("plan must not be null");
         }
+        var shape = state.planShape().orElse(null);
+        if (shape == null) {
+            return failure("plan shape must not be null");
+        }
 
         var budget = new Budget(budgetLimits, modelPricing);
         try {
-            var executionState = planExecutor.execute(plan, budget);
+            var executionState = planExecutor.execute(plan, shape, budget);
             applyExecutionState(plan, executionState);
 
             if (budget.exhausted()) {

@@ -17,6 +17,7 @@ final class Lg4jRunState extends AgentState {
     static final String SESSION_ID = "sessionId";
     static final String RUN_ID = "runId";
     static final String PLAN = "plan";
+    static final String PLAN_SHAPE = "planShape";
     static final String BUDGET = "budget";
     static final String FAILURE_CONTEXT = "failureContext";
     static final String STATUS = "status";
@@ -45,6 +46,10 @@ final class Lg4jRunState extends AgentState {
 
     Optional<Plan> plan() {
         return value(PLAN);
+    }
+
+    Optional<Lg4jPlanShape> planShape() {
+        return value(PLAN_SHAPE);
     }
 
     Optional<BudgetSnapshot> budget() {

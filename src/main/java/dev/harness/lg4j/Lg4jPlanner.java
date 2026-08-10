@@ -9,6 +9,8 @@ import org.springframework.util.Assert;
 @Component
 class Lg4jPlanner {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(Lg4jPlanner.class);
+
     private static final String TOOLS = """
             query_prometheus(service, metric, from, to) -> PrometheusQueryResult role=EVIDENCE
             query_loki(service, query, from, to) -> LokiQueryResult role=EVIDENCE
@@ -64,6 +66,8 @@ class Lg4jPlanner {
         if (plan == null) {
             throw new IllegalStateException("Planner returned an empty plan");
         }
+
+        log.info(Lg4jDebugValue.dump(plan));
 
         return new Lg4jPlanningResult(plan, usageExtractor.extract(response.response()));
     }

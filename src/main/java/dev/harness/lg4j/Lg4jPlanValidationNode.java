@@ -17,15 +17,26 @@ import static dev.harness.agent.tools.IncidentInvestigationTools.BUILD_INCIDENT_
 @Component
 class Lg4jPlanValidationNode {
 
+    private final Lg4jPlanShapeAnalyzer shapeAnalyzer = new Lg4jPlanShapeAnalyzer();
+
     Map<String, Object> validate(Lg4jRunState state) {
         if (state.terminal()) {
             return Map.of();
         }
 
         var error = validatePlan(state.plan().orElse(null));
-        if (error == null) {
-            return Map.of();
+        if (error != null) {
+            return validationFailed(error);
         }
+
+        try {
+            return Map.of(Lg4jRunState.PLAN_SHAPE, shapeAnalyzer.analyze(state.plan().orElseThrow()));
+        } catch (IllegalArgumentException exception) {
+            return validationFailed(exception.getMessage());
+        }
+    }
+
+    private Map<String, Object> validationFailed(String error) {
         return Map.of(
                 Lg4jRunState.STATUS, RunStatus.FAILED_VALIDATION,
                 Lg4jRunState.ERROR_CLASS, ErrorClass.VALIDATION,

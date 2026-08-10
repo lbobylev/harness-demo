@@ -33,9 +33,12 @@ class Lg4jPlanExecutor {
         this.maxConcurrency = Math.max(1, maxConcurrency);
     }
 
-    Lg4jPlanExecutionState execute(Plan plan, Budget budget) {
+    Lg4jPlanExecutionState execute(Plan plan, Lg4jPlanShape shape, Budget budget) {
         if (plan == null) {
             throw new IllegalArgumentException("plan must not be null");
+        }
+        if (shape == null) {
+            throw new IllegalArgumentException("plan shape must not be null");
         }
         if (budget == null) {
             throw new IllegalArgumentException("budget must not be null");
@@ -43,7 +46,7 @@ class Lg4jPlanExecutor {
         try {
             var semaphore = new Semaphore(maxConcurrency);
             return graphBuilder
-                    .build(plan, node -> node_async(state -> executeNode(budget, semaphore, node, state)))
+                    .build(plan, shape, node -> node_async(state -> executeNode(budget, semaphore, node, state)))
                     .compile()
                     .invoke(initialState(budget))
                     .orElseThrow(() -> new IllegalStateException("LangGraph4j plan graph returned no final state"));
