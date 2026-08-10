@@ -8,6 +8,7 @@ import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -20,6 +21,12 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 public class Lg4jHarnessRunner {
 
     private static final String PLAN_EXECUTOR_NOT_IMPLEMENTED = "LangGraph4j plan executor is not implemented yet";
+
+    private final Lg4jPlanNode planNode;
+
+    public Lg4jHarnessRunner(Lg4jPlanNode planNode) {
+        this.planNode = planNode;
+    }
 
     public RunResult run(RunRequest request) {
         try {
@@ -35,7 +42,7 @@ public class Lg4jHarnessRunner {
 
     private StateGraph<Lg4jRunState> graph() throws GraphStateException {
         return new StateGraph<>(Lg4jRunState.SCHEMA, Lg4jRunState::new)
-                .addNode("plan", node_async(state -> Map.of()))
+                .addNode("plan", node_async(planNode::plan))
                 .addNode("validate", node_async(state -> Map.of()))
                 .addNode("execute", node_async(this::execute))
                 .addNode("verify", node_async(state -> Map.of()))
@@ -59,11 +66,13 @@ public class Lg4jHarnessRunner {
     }
 
     private static Map<String, Object> initialState(RunRequest request) {
-        return Map.of(
-                Lg4jRunState.GOAL, request == null ? "" : request.goal(),
-                Lg4jRunState.SESSION_ID, request == null ? "" : request.sessionId(),
-                Lg4jRunState.RUN_ID, UUID.randomUUID().toString()
-        );
+        var state = new HashMap<String, Object>();
+        state.put(Lg4jRunState.GOAL, request == null || request.goal() == null ? "" : request.goal());
+        if (request != null && request.sessionId() != null) {
+            state.put(Lg4jRunState.SESSION_ID, request.sessionId());
+        }
+        state.put(Lg4jRunState.RUN_ID, UUID.randomUUID().toString());
+        return state;
     }
 
     private static RunResult failureResult(Lg4jRunState state) {
@@ -73,9 +82,9 @@ public class Lg4jHarnessRunner {
                 state.status().orElse(RunStatus.FAILED_EXECUTION),
                 null,
                 state.error().orElse(PLAN_EXECUTOR_NOT_IMPLEMENTED),
-                ErrorClass.FATAL,
+                state.errorClass().orElse(ErrorClass.FATAL),
                 null,
-                null,
+                state.plan().orElse(null),
                 List.of(),
                 null
         );

@@ -4,11 +4,12 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import dev.harness.agent.ai.AiUsage;
 import dev.harness.agent.run.HarnessErrorCode;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class PlanNode {
+public class PlanNode implements Serializable {
 
     private String id;
 

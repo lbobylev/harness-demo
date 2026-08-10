@@ -1,11 +1,12 @@
 package dev.harness.agent.plan;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-public record Plan(List<PlanNode> nodes) {
+public record Plan(List<PlanNode> nodes) implements Serializable {
 
     public Plan {
         nodes = nodes == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(nodes));
