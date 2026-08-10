@@ -7,3 +7,11 @@ openspec/
 
 minimal_agentic_harness.md
 article.md
+
+.classpath
+.factorypath
+.project
+.settings/
+article_en.md
+article_ru.md
+
