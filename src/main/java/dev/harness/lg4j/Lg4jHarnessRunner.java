@@ -24,8 +24,11 @@ public class Lg4jHarnessRunner {
 
     private final Lg4jPlanNode planNode;
 
-    public Lg4jHarnessRunner(Lg4jPlanNode planNode) {
+    private final Lg4jPlanValidationNode validateNode;
+
+    public Lg4jHarnessRunner(Lg4jPlanNode planNode, Lg4jPlanValidationNode validateNode) {
         this.planNode = planNode;
+        this.validateNode = validateNode;
     }
 
     public RunResult run(RunRequest request) {
@@ -43,7 +46,7 @@ public class Lg4jHarnessRunner {
     private StateGraph<Lg4jRunState> graph() throws GraphStateException {
         return new StateGraph<>(Lg4jRunState.SCHEMA, Lg4jRunState::new)
                 .addNode("plan", node_async(planNode::plan))
-                .addNode("validate", node_async(state -> Map.of()))
+                .addNode("validate", node_async(validateNode::validate))
                 .addNode("execute", node_async(this::execute))
                 .addNode("verify", node_async(state -> Map.of()))
                 .addNode("finish", node_async(state -> Map.of()))
