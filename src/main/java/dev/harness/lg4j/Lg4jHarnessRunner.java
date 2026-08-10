@@ -28,13 +28,17 @@ public class Lg4jHarnessRunner {
 
     private final Lg4jPlanExecutionNode executionNode;
 
+    private final Lg4jVerificationNode verificationNode;
+
     public Lg4jHarnessRunner(
             Lg4jPlanNode planNode,
             Lg4jPlanValidationNode validateNode,
-            Lg4jPlanExecutionNode executionNode) {
+            Lg4jPlanExecutionNode executionNode,
+            Lg4jVerificationNode verificationNode) {
         this.planNode = planNode;
         this.validateNode = validateNode;
         this.executionNode = executionNode;
+        this.verificationNode = verificationNode;
     }
 
     public RunResult run(RunRequest request) {
@@ -54,7 +58,7 @@ public class Lg4jHarnessRunner {
                 .addNode("plan", node_async(planNode::plan))
                 .addNode("validate", node_async(validateNode::validate))
                 .addNode("execute", node_async(executionNode::execute))
-                .addNode("verify", node_async(state -> Map.of()))
+                .addNode("verify", node_async(verificationNode::verify))
                 .addNode("finish", node_async(state -> Map.of()))
                 .addEdge(START, "plan")
                 .addEdge("plan", "validate")
@@ -79,10 +83,10 @@ public class Lg4jHarnessRunner {
                 state.runId().orElseGet(() -> UUID.randomUUID().toString()),
                 state.sessionId().orElse(null),
                 state.status().orElse(RunStatus.FAILED_EXECUTION),
-                null,
-                state.error().orElse(PLAN_EXECUTOR_NOT_IMPLEMENTED),
+                state.report().orElse(null),
+                state.error().orElse(null),
                 state.errorClass().orElse(ErrorClass.FATAL),
-                null,
+                state.verdict().orElse(null),
                 state.plan().orElse(null),
                 List.of(),
                 state.budget().orElse(null)

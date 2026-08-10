@@ -4,6 +4,7 @@ import dev.harness.agent.budget.BudgetSnapshot;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.run.ErrorClass;
 import dev.harness.agent.run.RunStatus;
+import dev.harness.agent.run.VerificationVerdict;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.state.Channel;
 
@@ -19,8 +20,10 @@ final class Lg4jRunState extends AgentState {
     static final String BUDGET = "budget";
     static final String FAILURE_CONTEXT = "failureContext";
     static final String STATUS = "status";
+    static final String REPORT = "report";
     static final String ERROR = "error";
     static final String ERROR_CLASS = "errorClass";
+    static final String VERDICT = "verdict";
 
     static final Map<String, Channel<?>> SCHEMA = Map.of();
 
@@ -56,12 +59,20 @@ final class Lg4jRunState extends AgentState {
         return value(STATUS);
     }
 
+    Optional<String> report() {
+        return value(REPORT);
+    }
+
     Optional<String> error() {
         return value(ERROR);
     }
 
     Optional<ErrorClass> errorClass() {
         return value(ERROR_CLASS);
+    }
+
+    Optional<VerificationVerdict> verdict() {
+        return value(VERDICT);
     }
 
     boolean terminal() {

@@ -1,12 +1,13 @@
 package dev.harness.agent.run;
 
+import java.io.Serializable;
 import java.util.Map;
 
 public record VerificationVerdict(
         boolean passed,
         String reason,
         Map<String, Object> details
-) {
+) implements Serializable {
 
     public VerificationVerdict {
         details = details == null ? Map.of() : Map.copyOf(details);
