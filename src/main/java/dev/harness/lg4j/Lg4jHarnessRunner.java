@@ -25,7 +25,7 @@ public class Lg4jHarnessRunner {
         try {
             var finalState = graph().compile().invoke(initialState(request)).orElseThrow(
                     () -> new IllegalStateException("LangGraph4j run graph returned no final state"));
-            return finalState.result().orElseGet(() -> failureResult(finalState));
+            return failureResult(finalState);
         } catch (Exception exception) {
             return new RunResult(UUID.randomUUID().toString(), request == null ? null : request.sessionId(),
                     RunStatus.FAILED_EXECUTION, null, exception.getMessage(), ErrorClass.FATAL,
@@ -39,7 +39,7 @@ public class Lg4jHarnessRunner {
                 .addNode("validate", node_async(state -> Map.of()))
                 .addNode("execute", node_async(this::execute))
                 .addNode("verify", node_async(state -> Map.of()))
-                .addNode("finish", node_async(this::finish))
+                .addNode("finish", node_async(state -> Map.of()))
                 .addEdge(START, "plan")
                 .addEdge("plan", "validate")
                 .addEdge("validate", "execute")
@@ -56,13 +56,6 @@ public class Lg4jHarnessRunner {
                 Lg4jRunState.STATUS, RunStatus.FAILED_EXECUTION,
                 Lg4jRunState.ERROR, PLAN_EXECUTOR_NOT_IMPLEMENTED
         );
-    }
-
-    private Map<String, Object> finish(Lg4jRunState state) {
-        if (state.result().isPresent()) {
-            return Map.of();
-        }
-        return Map.of(Lg4jRunState.RESULT, failureResult(state));
     }
 
     private static Map<String, Object> initialState(RunRequest request) {

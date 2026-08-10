@@ -3,6 +3,7 @@ package dev.harness.cli;
 import dev.harness.agent.orchestration.AgentOrchestrator;
 import dev.harness.agent.orchestration.RunRequest;
 import dev.harness.agent.run.RunResult;
+import dev.harness.lg4j.Lg4jHarnessRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -16,9 +17,11 @@ public class HarnessCliRunner implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(HarnessCliRunner.class);
 
     private final AgentOrchestrator orchestrator;
+    private final Lg4jHarnessRunner lg4jRunner;
 
-    public HarnessCliRunner(AgentOrchestrator orchestrator) {
+    public HarnessCliRunner(AgentOrchestrator orchestrator, Lg4jHarnessRunner lg4jRunner) {
         this.orchestrator = orchestrator;
+        this.lg4jRunner = lg4jRunner;
     }
 
     @Override
@@ -44,14 +47,10 @@ public class HarnessCliRunner implements CommandLineRunner {
             logUsage();
             return;
         }
-        if ("lg4j".equalsIgnoreCase(engine)) {
-            log.info("LangGraph4j engine is not implemented yet.");
-            return;
-        }
-
         String goal = String.join(" ", Arrays.copyOfRange(args, goalStart, args.length)).trim();
-        log.info("Running CLI goal");
-        RunResult result = orchestrator.run(new RunRequest(goal, "cli"));
+        log.info("Running CLI goal with engine {}", engine);
+        RunRequest request = new RunRequest(goal, "cli");
+        RunResult result = "lg4j".equalsIgnoreCase(engine) ? lg4jRunner.run(request) : orchestrator.run(request);
         log.info("CLI run finished with status {}", result.status());
         logResult(result);
     }
