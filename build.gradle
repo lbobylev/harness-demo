@@ -15,17 +15,20 @@ java {
 
 ext {
     springAiVersion = '2.0.0'
+    langgraph4jVersion = '1.8.24'
 }
 
 dependencyManagement {
     imports {
         mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+        mavenBom "org.bsc.langgraph4j:langgraph4j-bom:${langgraph4jVersion}"
     }
 }
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter'
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+    implementation 'org.bsc.langgraph4j:langgraph4j-core'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
