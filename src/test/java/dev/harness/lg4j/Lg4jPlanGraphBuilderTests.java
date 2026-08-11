@@ -95,9 +95,9 @@ class Lg4jPlanGraphBuilderTests {
                                 Lg4jPlanExecutionState.STATUSES,
                                 Map.of(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE, NodeStatus.SKIPPED));
                     }
-                    for (var terminal : Lg4jPlanDag.terminals(plan)) {
-                        assertThat(state.statuses()).containsEntry(terminal.getId(), NodeStatus.DONE);
-                    }
+                    assertThat(plan.nodes())
+                            .extracting(PlanNode::getId)
+                            .allSatisfy(nodeId -> assertThat(state.statuses()).containsEntry(nodeId, NodeStatus.DONE));
                     return done(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE);
                 }));
         return graph.compile();
