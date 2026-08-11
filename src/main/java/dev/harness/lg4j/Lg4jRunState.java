@@ -27,6 +27,8 @@ final class Lg4jRunState extends AgentState {
     static final String ERROR = "error";
     static final String ERROR_CLASS = "errorClass";
     static final String VERDICT = "verdict";
+    static final String REPLAN_COUNT = "replanCount";
+    static final String NEEDS_REPLAN = "needsReplan";
 
     static final Map<String, Channel<?>> SCHEMA = Map.of();
 
@@ -84,6 +86,21 @@ final class Lg4jRunState extends AgentState {
 
     Optional<VerificationVerdict> verdict() {
         return value(VERDICT);
+    }
+
+    int replanCount() {
+        return value(REPLAN_COUNT)
+                .filter(Number.class::isInstance)
+                .map(Number.class::cast)
+                .map(Number::intValue)
+                .orElse(0);
+    }
+
+    boolean needsReplan() {
+        return value(NEEDS_REPLAN)
+                .filter(Boolean.class::isInstance)
+                .map(Boolean.class::cast)
+                .orElse(false);
     }
 
     boolean terminal() {

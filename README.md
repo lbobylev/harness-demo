@@ -39,8 +39,9 @@ Key application settings:
 | Setting | Default | Description |
 | --- | --- | --- |
 | `spring.ai.openai.chat.options.model` | `${OPENAI_MODEL:gpt-4.1-mini}` | OpenAI chat model used by Spring AI. |
-| `harness.replanning.max-replans` | `1` | Maximum number of replanning attempts after recoverable failures. |
+| `harness.replanning.max-replans` | `2` | Maximum number of replanning attempts after recoverable failures. |
 | `harness.execution.max-concurrency` | `5` | Maximum number of DAG nodes executed in parallel. |
+| `harness.verification.min-confidence` | `0.75` | Minimum report confidence before the harness asks the planner for a different investigation angle. |
 | `harness.budget.max-tokens` | `20000` | Token budget for a run. |
 | `harness.budget.max-agent-invocations` | `50` | Agent invocation budget for a run. |
 | `harness.budget.max-wall-clock` | `60s` | Wall-clock budget for a run. |

@@ -13,6 +13,8 @@ harness:
     max-replans: 2
   execution:
     max-concurrency: 5
+  verification:
+    min-confidence: 0.75
   budget:
     max-tokens: 20000
     max-agent-invocations: 50

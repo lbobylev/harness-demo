@@ -149,7 +149,7 @@ class IncidentReportAgent {
     IncidentReport build(String incident, HypothesisAssessment hypothesisAssessment, CorrelationResult evidence) {
         return new IncidentReport(
                 "catalog-service degradation caused checkout-service 5xx through downstream timeouts",
-                0.89,
+                0.60,
                 evidence == null ? new EvidenceCorrelationAgent().correlate(null).timeline() : evidence.timeline(),
                 List.of(
                         "5xx_rate increased during the incident window",

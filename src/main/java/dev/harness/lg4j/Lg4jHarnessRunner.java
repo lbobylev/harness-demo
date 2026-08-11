@@ -18,6 +18,7 @@ import java.util.UUID;
 
 import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
+import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 @Component
@@ -37,6 +38,8 @@ public class Lg4jHarnessRunner {
 
     private final Lg4jVerificationNode verificationNode;
 
+    private final Lg4jReplanDecisionNode replanDecisionNode;
+
     private final Lg4jFinishNode finishNode;
 
     public Lg4jHarnessRunner(
@@ -46,6 +49,7 @@ public class Lg4jHarnessRunner {
             Lg4jPlanExecutionNode executionNode,
             Lg4jReportNode reportNode,
             Lg4jVerificationNode verificationNode,
+            Lg4jReplanDecisionNode replanDecisionNode,
             Lg4jFinishNode finishNode) {
         this.budgetFactory = budgetFactory;
         this.planNode = planNode;
@@ -53,6 +57,7 @@ public class Lg4jHarnessRunner {
         this.executionNode = executionNode;
         this.reportNode = reportNode;
         this.verificationNode = verificationNode;
+        this.replanDecisionNode = replanDecisionNode;
         this.finishNode = finishNode;
     }
 
@@ -77,13 +82,17 @@ public class Lg4jHarnessRunner {
                 .addNode("execute", node_async(state -> executionNode.execute(state, budget)))
                 .addNode("build_report", node_async(reportNode::build))
                 .addNode("verify", node_async(verificationNode::verify))
+                .addNode("decide_replan", node_async(state -> replanDecisionNode.decide(state, budget)))
                 .addNode("finish", node_async(finishNode::finish))
                 .addEdge(START, "plan")
                 .addEdge("plan", "validate")
                 .addEdge("validate", "execute")
                 .addEdge("execute", "build_report")
                 .addEdge("build_report", "verify")
-                .addEdge("verify", "finish")
+                .addEdge("verify", "decide_replan")
+                .addConditionalEdges("decide_replan",
+                        edge_async(state -> state.needsReplan() ? "replan" : "finish"),
+                        Map.of("replan", "plan", "finish", "finish"))
                 .addEdge("finish", END);
     }
 

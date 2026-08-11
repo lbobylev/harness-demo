@@ -79,10 +79,11 @@ class Lg4jPlanner {
 
         return prompt + """
 
-                PREVIOUS FAILURE:
+                PREVIOUS ATTEMPT CONTEXT:
                 %s
 
-                Revise the plan to avoid repeating the failed action.
+                Revise the plan to avoid repeating the weak or failed evidence path.
+                If the previous attempt had low confidence, use a different investigation angle or broader terminal evidence.
                 """.formatted(failureContext);
     }
 }

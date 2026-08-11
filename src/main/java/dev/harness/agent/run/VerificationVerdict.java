@@ -20,4 +20,8 @@ public record VerificationVerdict(
     public static VerificationVerdict failed(String reason) {
         return new VerificationVerdict(false, reason, Map.of());
     }
+
+    public static VerificationVerdict failed(String reason, Map<String, Object> details) {
+        return new VerificationVerdict(false, reason, details);
+    }
 }
