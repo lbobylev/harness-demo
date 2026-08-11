@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class Lg4jReportNodeTests {
 
-    private final Lg4jReportNode reportNode = new Lg4jReportNode(new Lg4jTools());
+    private final Lg4jReportNode reportNode = new Lg4jReportNode(new IncidentReportAgent());
 
     @Test
     void buildsReportFromIncidentAnalysis() {

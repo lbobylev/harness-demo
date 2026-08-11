@@ -13,7 +13,7 @@ public class PlanNode implements Serializable {
 
     private String id;
 
-    private String tool;
+    private String agent;
 
     private List<ArgumentBinding> arguments = List.of();
 
@@ -32,13 +32,13 @@ public class PlanNode implements Serializable {
     public PlanNode() {
     }
 
-    public PlanNode(String id, String tool, List<String> deps) {
-        this(id, tool, List.of(), deps);
+    public PlanNode(String id, String agent, List<String> deps) {
+        this(id, agent, List.of(), deps);
     }
 
-    public PlanNode(String id, String tool, List<ArgumentBinding> arguments, List<String> deps) {
+    public PlanNode(String id, String agent, List<ArgumentBinding> arguments, List<String> deps) {
         this.id = id;
-        this.tool = tool;
+        this.agent = agent;
         setArguments(arguments);
         setDeps(deps);
     }
@@ -51,12 +51,12 @@ public class PlanNode implements Serializable {
         this.id = id;
     }
 
-    public String getTool() {
-        return tool;
+    public String getAgent() {
+        return agent;
     }
 
-    public void setTool(String tool) {
-        this.tool = tool;
+    public void setAgent(String agent) {
+        this.agent = agent;
     }
 
     public List<ArgumentBinding> getArguments() {

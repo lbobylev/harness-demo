@@ -21,10 +21,14 @@ class Lg4jEvidenceAnalysisNode {
     private static final String DEFAULT_HYPOTHESIS = "catalog-service degradation caused checkout-service 5xx through downstream timeouts";
     private static final String DEPENDENCY_FAILED = "dependency failed";
 
-    private final Lg4jTools tools;
+    private final EvidenceCorrelationAgent evidenceCorrelationAgent;
+    private final HypothesisAssessmentAgent hypothesisAssessmentAgent;
 
-    Lg4jEvidenceAnalysisNode(Lg4jTools tools) {
-        this.tools = tools;
+    Lg4jEvidenceAnalysisNode(
+            EvidenceCorrelationAgent evidenceCorrelationAgent,
+            HypothesisAssessmentAgent hypothesisAssessmentAgent) {
+        this.evidenceCorrelationAgent = evidenceCorrelationAgent;
+        this.hypothesisAssessmentAgent = hypothesisAssessmentAgent;
     }
 
     Map<String, Object> analyze(Plan plan, Lg4jPlanExecutionState state) {
@@ -34,8 +38,8 @@ class Lg4jEvidenceAnalysisNode {
 
         try {
             var evidence = evidenceBundle(plan, state);
-            var correlation = tools.correlate(evidence);
-            var assessment = tools.testHypothesis(DEFAULT_HYPOTHESIS, correlation);
+            var correlation = evidenceCorrelationAgent.correlate(evidence);
+            var assessment = hypothesisAssessmentAgent.assess(DEFAULT_HYPOTHESIS, correlation);
             var analysis = new Lg4jIncidentAnalysis(evidence, correlation, assessment);
             return stateUpdate(NodeStatus.DONE, analysis, null);
         } catch (Exception exception) {

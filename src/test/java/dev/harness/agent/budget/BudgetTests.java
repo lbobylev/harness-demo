@@ -91,7 +91,7 @@ class BudgetTests {
     }
 
     @Test
-    void pressureIncludesToolCallUtilizationAtBoundary() {
+    void pressureIncludesAgentInvocationUtilizationAtBoundary() {
         Budget budget = new Budget(new BudgetLimits(
                 100,
                 4,
@@ -107,7 +107,7 @@ class BudgetTests {
     }
 
     @Test
-    void tryChargeToolCallDoesNotExceedLimit() {
+    void tryChargeAgentInvocationDoesNotExceedLimit() {
         Budget budget = new Budget(new BudgetLimits(
                 100,
                 1,
@@ -115,10 +115,10 @@ class BudgetTests {
                 new BigDecimal("1.00")
         ));
 
-        assertThat(budget.tryChargeToolCall()).isTrue();
-        assertThat(budget.tryChargeToolCall()).isFalse();
+        assertThat(budget.tryChargeAgentInvocation()).isTrue();
+        assertThat(budget.tryChargeAgentInvocation()).isFalse();
 
-        assertThat(budget.snapshot().toolCallsUsed()).isEqualTo(1);
+        assertThat(budget.snapshot().agentInvocationsUsed()).isEqualTo(1);
     }
 
     @Test

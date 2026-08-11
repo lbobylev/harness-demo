@@ -24,7 +24,7 @@ class Lg4jPlanExecutionNodeTests {
     @Test
     void usesRunBudgetFromState() {
         var budget = budget(100, 10);
-        var plan = new Plan(List.of(new PlanNode("metrics", "query_prometheus", List.of())));
+        var plan = new Plan(List.of(new PlanNode("metrics", Lg4jAgentSpecs.METRICS_AGENT, List.of())));
         var executor = mock(Lg4jPlanExecutor.class);
         when(executor.execute(same(plan), same(budget))).thenReturn(new Lg4jPlanExecutionState(Map.of(
                 Lg4jPlanExecutionState.RESULTS, Map.of(),
@@ -39,9 +39,9 @@ class Lg4jPlanExecutionNodeTests {
         verify(executor).execute(same(plan), same(budget));
     }
 
-    private static Budget budget(long maxTokens, long maxToolCalls) {
+    private static Budget budget(long maxTokens, long maxAgentInvocations) {
         return new Budget(
-                new BudgetLimits(maxTokens, maxToolCalls, Duration.ofMinutes(1), new BigDecimal("100.00")),
+                new BudgetLimits(maxTokens, maxAgentInvocations, Duration.ofMinutes(1), new BigDecimal("100.00")),
                 new ModelPricing("test-model", BigDecimal.ZERO, BigDecimal.ZERO));
     }
 }

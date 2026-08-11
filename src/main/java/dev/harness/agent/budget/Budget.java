@@ -21,7 +21,7 @@ public class Budget {
 
     private long outputTokensUsed;
 
-    private long toolCallsUsed;
+    private long agentInvocationsUsed;
 
     private BigDecimal estimatedCostUsd = BigDecimal.ZERO;
 
@@ -67,14 +67,14 @@ public class Budget {
         return true;
     }
 
-    public synchronized boolean tryChargeToolCall() {
-        return tryCharge(BudgetCharge.toolCall());
+    public synchronized boolean tryChargeAgentInvocation() {
+        return tryCharge(BudgetCharge.agentInvocation());
     }
 
     private void apply(BudgetCharge charge) {
         inputTokensUsed += charge.inputTokens();
         outputTokensUsed += charge.outputTokens();
-        toolCallsUsed += charge.toolCalls();
+        agentInvocationsUsed += charge.agentInvocations();
         estimatedCostUsd = estimatedCostUsd.add(charge.estimatedCostUsd());
     }
 
@@ -83,16 +83,16 @@ public class Budget {
             return false;
         }
         long tokensAfterCharge = tokensUsed() + charge.inputTokens() + charge.outputTokens();
-        long toolCallsAfterCharge = toolCallsUsed + charge.toolCalls();
+        long agentInvocationsAfterCharge = agentInvocationsUsed + charge.agentInvocations();
         BigDecimal costAfterCharge = estimatedCostUsd.add(charge.estimatedCostUsd());
 
         return tokensAfterCharge <= limits.maxTokens()
-                && toolCallsAfterCharge <= limits.maxToolCalls()
+                && agentInvocationsAfterCharge <= limits.maxAgentInvocations()
                 && costAfterCharge.compareTo(limits.maxEstimatedCostUsd()) <= 0;
     }
 
-    public synchronized void chargeToolCall() {
-        charge(BudgetCharge.toolCall());
+    public synchronized void chargeAgentInvocation() {
+        charge(BudgetCharge.agentInvocation());
     }
 
     public synchronized void chargeTokens(long inputTokens, long outputTokens) {
@@ -137,7 +137,7 @@ public class Budget {
     public synchronized double pressure() {
         return max(
                 tokenPressure(),
-                toolCallPressure(),
+                agentInvocationPressure(),
                 wallClockPressure(),
                 estimatedCostPressure()
         );
@@ -149,8 +149,8 @@ public class Budget {
                 elapsed(),
                 tokensUsed(),
                 limits.maxTokens(),
-                toolCallsUsed,
-                limits.maxToolCalls(),
+                agentInvocationsUsed,
+                limits.maxAgentInvocations(),
                 estimatedCostUsd,
                 limits.maxEstimatedCostUsd(),
                 pressure()
@@ -169,8 +169,8 @@ public class Budget {
         return (double) tokensUsed() / limits.maxTokens();
     }
 
-    private double toolCallPressure() {
-        return (double) toolCallsUsed / limits.maxToolCalls();
+    private double agentInvocationPressure() {
+        return (double) agentInvocationsUsed / limits.maxAgentInvocations();
     }
 
     private double wallClockPressure() {

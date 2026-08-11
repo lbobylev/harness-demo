@@ -64,8 +64,8 @@ final class Lg4jDebugValue {
     }
 
     private static String dumpNode(PlanNode node) {
-        return "%s(tool=%s,deps=%s,status=%s,error=%s)"
-                .formatted(node.getId(), node.getTool(), node.getDeps(), node.getStatus(), node.getError());
+        return "%s(agent=%s,deps=%s,status=%s,error=%s)"
+                .formatted(node.getId(), node.getAgent(), node.getDeps(), node.getStatus(), node.getError());
     }
 
     private static String dumpRunState(Lg4jRunState state) {
@@ -87,12 +87,12 @@ final class Lg4jDebugValue {
     }
 
     private static String dumpBudget(BudgetSnapshot budget) {
-        return "Budget(tokens=%d/%d,tools=%d/%d,cost=%s/%s,pressure=%.3f)"
+        return "Budget(tokens=%d/%d,agents=%d/%d,cost=%s/%s,pressure=%.3f)"
                 .formatted(
                         budget.tokensUsed(),
                         budget.maxTokens(),
-                        budget.toolCallsUsed(),
-                        budget.maxToolCalls(),
+                        budget.agentInvocationsUsed(),
+                        budget.maxAgentInvocations(),
                         budget.estimatedCostUsd(),
                         budget.maxEstimatedCostUsd(),
                         budget.pressure());

@@ -12,34 +12,35 @@ import dev.harness.agent.plan.ArgumentValueType;
 import dev.harness.agent.plan.NodeStatus;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.plan.PlanNode;
-import dev.harness.agent.tools.ToolExecutionResult;
+import dev.harness.agent.execution.AgentResponse;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_BASELINE_FROM;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_BASELINE_TO;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_FROM;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_INCIDENT_FROM;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_INCIDENT_TO;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_LOGS;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_METRIC;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_METRIC_SERIES;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_QUERY;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_SERVICE;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_TO;
-import static dev.harness.agent.tools.IncidentInvestigationTools.COMPARE_PERIODS;
-import static dev.harness.agent.tools.IncidentInvestigationTools.FIND_LOG_SIGNATURE;
-import static dev.harness.agent.tools.IncidentInvestigationTools.GET_CONFIG_CHANGES;
-import static dev.harness.agent.tools.IncidentInvestigationTools.GET_DEPLOYMENTS;
-import static dev.harness.agent.tools.IncidentInvestigationTools.QUERY_LOKI;
-import static dev.harness.agent.tools.IncidentInvestigationTools.QUERY_PROMETHEUS;
-import static dev.harness.agent.tools.IncidentInvestigationTools.QUERY_TEMPO;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_BASELINE_FROM;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_BASELINE_TO;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_FROM;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_INCIDENT_FROM;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_INCIDENT_TO;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_LOGS;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_METRIC;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_METRIC_SERIES;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_QUERY;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_SERVICE;
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_TO;
+import static dev.harness.lg4j.Lg4jAgentSpecs.CONFIG_CHANGES_AGENT;
+import static dev.harness.lg4j.Lg4jAgentSpecs.DEPLOYMENTS_AGENT;
+import static dev.harness.lg4j.Lg4jAgentSpecs.LOGS_AGENT;
+import static dev.harness.lg4j.Lg4jAgentSpecs.LOG_SIGNATURE_AGENT;
+import static dev.harness.lg4j.Lg4jAgentSpecs.METRICS_AGENT;
+import static dev.harness.lg4j.Lg4jAgentSpecs.METRIC_COMPARISON_AGENT;
+import static dev.harness.lg4j.Lg4jAgentSpecs.TRACES_AGENT;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class Lg4jPlanExecutorTests {
@@ -47,20 +48,19 @@ class Lg4jPlanExecutorTests {
     private static final String ANALYZE_EVIDENCE = Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE;
 
     @Test
-    void doesNotExecuteMoreReadyNodesThanRemainingToolCallBudget() {
+    void doesNotExecuteMoreReadyNodesThanRemainingAgentInvocationBudget() {
         var budget = budget(100, 1);
-        var tools = new Lg4jTools();
         var executor = new Lg4jPlanExecutor(
-                new Lg4jToolExecutor(tools),
-                new Lg4jEvidenceAnalysisNode(tools),
+                agentExecutor(),
+                evidenceAnalysisNode(),
                 4);
         var plan = new Plan(List.of(
-                new PlanNode("metrics", "query_prometheus", List.of()),
-                new PlanNode("logs", "query_loki", List.of())));
+                new PlanNode("metrics", METRICS_AGENT, List.of()),
+                new PlanNode("logs", LOGS_AGENT, List.of())));
 
         var state = executor.execute(plan, budget);
 
-        assertThat(budget.snapshot().toolCallsUsed()).isEqualTo(1L);
+        assertThat(budget.snapshot().agentInvocationsUsed()).isEqualTo(1L);
         assertThat(state.statuses().entrySet())
                 .filteredOn(entry -> List.of("metrics", "logs").contains(entry.getKey()))
                 .extracting(Map.Entry::getValue)
@@ -70,9 +70,9 @@ class Lg4jPlanExecutorTests {
 
     @Test
     void executesSingleTerminalPlannerNode() {
-        var toolExecutor = new RecordingToolExecutor();
-        var executor = executor(toolExecutor);
-        var plan = new Plan(List.of(node("traces", QUERY_TEMPO, literals(
+        var agentExecutor = new RecordingAgentExecutor();
+        var executor = executor(agentExecutor);
+        var plan = new Plan(List.of(node("traces", TRACES_AGENT, literals(
                 ARG_SERVICE, "checkout-service",
                 ARG_QUERY, "catalog",
                 ARG_FROM, "14:00",
@@ -84,14 +84,14 @@ class Lg4jPlanExecutorTests {
         assertThat(state.statuses())
                 .containsEntry("traces", NodeStatus.DONE)
                 .containsEntry(ANALYZE_EVIDENCE, NodeStatus.DONE);
-        assertThat(toolExecutor.callsTo(QUERY_TEMPO)).hasSize(1);
+        assertThat(agentExecutor.callsTo(TRACES_AGENT)).hasSize(1);
         assertThat(state.result(ANALYZE_EVIDENCE)).isInstanceOf(Lg4jIncidentAnalysis.class);
     }
 
     @Test
-    void executesPlannerDagAndPassesNodeResultsToDownstreamTools() {
-        var toolExecutor = new RecordingToolExecutor();
-        var executor = executor(toolExecutor);
+    void executesPlannerDagAndPassesNodeResultsToDownstreamAgents() {
+        var agentExecutor = new RecordingAgentExecutor();
+        var executor = executor(agentExecutor);
         var plan = fullEvidencePlan();
 
         var state = executor.execute(plan, budget(10_000, 20));
@@ -107,9 +107,9 @@ class Lg4jPlanExecutorTests {
                 .containsEntry("configs", NodeStatus.DONE)
                 .containsEntry(ANALYZE_EVIDENCE, NodeStatus.DONE);
 
-        assertThat(toolExecutor.argsFor("comparison").get(ARG_METRIC_SERIES))
+        assertThat(agentExecutor.argsFor("comparison").get(ARG_METRIC_SERIES))
                 .isEqualTo(state.result("metrics"));
-        assertThat(toolExecutor.argsFor("signature").get(ARG_LOGS))
+        assertThat(agentExecutor.argsFor("signature").get(ARG_LOGS))
                 .isEqualTo(state.result("logs"));
         assertThat(state.result("comparison")).isNotNull();
         assertThat(state.result("signature")).isNotNull();
@@ -128,21 +128,21 @@ class Lg4jPlanExecutorTests {
 
     @Test
     void supportsFanOutFromOnePlannerNodeToMultipleConsumers() {
-        var toolExecutor = new RecordingToolExecutor();
-        var executor = executor(toolExecutor);
+        var agentExecutor = new RecordingAgentExecutor();
+        var executor = executor(agentExecutor);
         var plan = new Plan(List.of(
-                node("metrics", QUERY_PROMETHEUS, literals(
+                node("metrics", METRICS_AGENT, literals(
                         ARG_SERVICE, "checkout-service",
                         ARG_METRIC, "5xx_rate",
                         ARG_FROM, "14:00",
                         ARG_TO, "14:45")),
-                node("baselineComparison", COMPARE_PERIODS, List.of(
+                node("baselineComparison", METRIC_COMPARISON_AGENT, List.of(
                         ref(ARG_METRIC_SERIES, "metrics"),
                         lit(ARG_BASELINE_FROM, "13:00"),
                         lit(ARG_BASELINE_TO, "13:45"),
                         lit(ARG_INCIDENT_FROM, "14:00"),
                         lit(ARG_INCIDENT_TO, "14:45")), "metrics"),
-                node("recentComparison", COMPARE_PERIODS, List.of(
+                node("recentComparison", METRIC_COMPARISON_AGENT, List.of(
                         ref(ARG_METRIC_SERIES, "metrics"),
                         lit(ARG_BASELINE_FROM, "14:00"),
                         lit(ARG_BASELINE_TO, "14:20"),
@@ -157,10 +157,10 @@ class Lg4jPlanExecutorTests {
                 .containsEntry("baselineComparison", NodeStatus.DONE)
                 .containsEntry("recentComparison", NodeStatus.DONE)
                 .containsEntry(ANALYZE_EVIDENCE, NodeStatus.DONE);
-        assertThat(toolExecutor.callsTo(QUERY_PROMETHEUS)).hasSize(1);
-        assertThat(toolExecutor.argsFor("baselineComparison").get(ARG_METRIC_SERIES))
+        assertThat(agentExecutor.callsTo(METRICS_AGENT)).hasSize(1);
+        assertThat(agentExecutor.argsFor("baselineComparison").get(ARG_METRIC_SERIES))
                 .isEqualTo(state.result("metrics"));
-        assertThat(toolExecutor.argsFor("recentComparison").get(ARG_METRIC_SERIES))
+        assertThat(agentExecutor.argsFor("recentComparison").get(ARG_METRIC_SERIES))
                 .isEqualTo(state.result("metrics"));
         assertThat(state.result(ANALYZE_EVIDENCE))
                 .isInstanceOfSatisfying(Lg4jIncidentAnalysis.class, analysis ->
@@ -172,27 +172,27 @@ class Lg4jPlanExecutorTests {
 
     @Test
     void skipsDependentNodesAfterFailureAndStillRunsIndependentPlannerBranches() {
-        var toolExecutor = new RecordingToolExecutor(QUERY_PROMETHEUS);
-        var executor = executor(toolExecutor);
+        var agentExecutor = new RecordingAgentExecutor(METRICS_AGENT);
+        var executor = executor(agentExecutor);
         var plan = new Plan(List.of(
-                node("metrics", QUERY_PROMETHEUS, literals(
+                node("metrics", METRICS_AGENT, literals(
                         ARG_SERVICE, "checkout-service",
                         ARG_METRIC, "5xx_rate",
                         ARG_FROM, "14:00",
                         ARG_TO, "14:45")),
-                node("comparison", COMPARE_PERIODS, List.of(
+                node("comparison", METRIC_COMPARISON_AGENT, List.of(
                         ref(ARG_METRIC_SERIES, "metrics"),
                         lit(ARG_BASELINE_FROM, "13:00"),
                         lit(ARG_BASELINE_TO, "13:45"),
                         lit(ARG_INCIDENT_FROM, "14:00"),
                         lit(ARG_INCIDENT_TO, "14:45")), "metrics"),
-                node("logs", QUERY_LOKI, literals(
+                node("logs", LOGS_AGENT, literals(
                         ARG_SERVICE, "checkout-service",
                         ARG_QUERY, "error timeout",
                         ARG_FROM, "14:00",
                         ARG_TO, "14:45")),
-                node("signature", FIND_LOG_SIGNATURE, List.of(ref(ARG_LOGS, "logs")), "logs"),
-                node("traces", QUERY_TEMPO, literals(
+                node("signature", LOG_SIGNATURE_AGENT, List.of(ref(ARG_LOGS, "logs")), "logs"),
+                node("traces", TRACES_AGENT, literals(
                         ARG_SERVICE, "checkout-service",
                         ARG_QUERY, "catalog",
                         ARG_FROM, "14:00",
@@ -208,23 +208,22 @@ class Lg4jPlanExecutorTests {
                 .containsEntry("traces", NodeStatus.DONE)
                 .containsEntry(ANALYZE_EVIDENCE, NodeStatus.SKIPPED);
         assertThat(state.errors())
-                .containsEntry("metrics", "planned failure: query_prometheus")
+                .containsEntry("metrics", "planned failure: MetricsAgent")
                 .containsEntry("comparison", "dependency failed")
                 .containsEntry(ANALYZE_EVIDENCE, "dependency failed");
-        assertThat(toolExecutor.callsTo(COMPARE_PERIODS)).isEmpty();
-        assertThat(toolExecutor.callsTo(QUERY_LOKI)).hasSize(1);
-        assertThat(toolExecutor.callsTo(FIND_LOG_SIGNATURE)).hasSize(1);
-        assertThat(toolExecutor.callsTo(QUERY_TEMPO)).hasSize(1);
+        assertThat(agentExecutor.callsTo(METRIC_COMPARISON_AGENT)).isEmpty();
+        assertThat(agentExecutor.callsTo(LOGS_AGENT)).hasSize(1);
+        assertThat(agentExecutor.callsTo(LOG_SIGNATURE_AGENT)).hasSize(1);
+        assertThat(agentExecutor.callsTo(TRACES_AGENT)).hasSize(1);
     }
 
     @Test
-    void skipsToolCallWhenWallClockBudgetExpires() {
-        var tools = new Lg4jTools();
+    void skipsAgentInvocationWhenWallClockBudgetExpires() {
         var executor = new Lg4jPlanExecutor(
-                new SlowToolExecutor(Duration.ofMillis(200)),
-                new Lg4jEvidenceAnalysisNode(tools),
+                new SlowAgentExecutor(Duration.ofMillis(200)),
+                evidenceAnalysisNode(),
                 1);
-        var plan = new Plan(List.of(node("traces", QUERY_TEMPO, literals(
+        var plan = new Plan(List.of(node("traces", TRACES_AGENT, literals(
                 ARG_SERVICE, "checkout-service",
                 ARG_QUERY, "catalog",
                 ARG_FROM, "14:00",
@@ -241,51 +240,50 @@ class Lg4jPlanExecutorTests {
         assertThat(state.result("traces")).isNull();
     }
 
-    private static Lg4jPlanExecutor executor(RecordingToolExecutor toolExecutor) {
-        return executor(toolExecutor, 4);
+    private static Lg4jPlanExecutor executor(RecordingAgentExecutor agentExecutor) {
+        return executor(agentExecutor, 4);
     }
 
-    private static Lg4jPlanExecutor executor(Lg4jToolExecutor toolExecutor, int maxConcurrency) {
-        var tools = new Lg4jTools();
-        return new Lg4jPlanExecutor(toolExecutor, new Lg4jEvidenceAnalysisNode(tools), maxConcurrency);
+    private static Lg4jPlanExecutor executor(Lg4jAgentExecutor agentExecutor, int maxConcurrency) {
+        return new Lg4jPlanExecutor(agentExecutor, evidenceAnalysisNode(), maxConcurrency);
     }
 
     private static Plan fullEvidencePlan() {
         return new Plan(List.of(
-                node("metrics", QUERY_PROMETHEUS, literals(
+                node("metrics", METRICS_AGENT, literals(
                         ARG_SERVICE, "checkout-service",
                         ARG_METRIC, "5xx_rate",
                         ARG_FROM, "14:00",
                         ARG_TO, "14:45")),
-                node("comparison", COMPARE_PERIODS, List.of(
+                node("comparison", METRIC_COMPARISON_AGENT, List.of(
                         ref(ARG_METRIC_SERIES, "metrics"),
                         lit(ARG_BASELINE_FROM, "13:00"),
                         lit(ARG_BASELINE_TO, "13:45"),
                         lit(ARG_INCIDENT_FROM, "14:00"),
                         lit(ARG_INCIDENT_TO, "14:45")), "metrics"),
-                node("logs", QUERY_LOKI, literals(
+                node("logs", LOGS_AGENT, literals(
                         ARG_SERVICE, "checkout-service",
                         ARG_QUERY, "error timeout",
                         ARG_FROM, "14:00",
                         ARG_TO, "14:45")),
-                node("signature", FIND_LOG_SIGNATURE, List.of(ref(ARG_LOGS, "logs")), "logs"),
-                node("traces", QUERY_TEMPO, literals(
+                node("signature", LOG_SIGNATURE_AGENT, List.of(ref(ARG_LOGS, "logs")), "logs"),
+                node("traces", TRACES_AGENT, literals(
                         ARG_SERVICE, "checkout-service",
                         ARG_QUERY, "catalog",
                         ARG_FROM, "14:00",
                         ARG_TO, "14:45")),
-                node("deployments", GET_DEPLOYMENTS, literals(
+                node("deployments", DEPLOYMENTS_AGENT, literals(
                         ARG_SERVICE, "checkout-service",
                         ARG_FROM, "14:00",
                         ARG_TO, "14:45")),
-                node("configs", GET_CONFIG_CHANGES, literals(
+                node("configs", CONFIG_CHANGES_AGENT, literals(
                         ARG_SERVICE, "checkout-service",
                         ARG_FROM, "14:00",
                         ARG_TO, "14:45"))));
     }
 
-    private static PlanNode node(String id, String tool, List<ArgumentBinding> arguments, String... deps) {
-        return new PlanNode(id, tool, arguments, List.of(deps));
+    private static PlanNode node(String id, String agent, List<ArgumentBinding> arguments, String... deps) {
+        return new PlanNode(id, agent, arguments, List.of(deps));
     }
 
     private static List<ArgumentBinding> literals(String... namesAndValues) {
@@ -304,35 +302,45 @@ class Lg4jPlanExecutorTests {
         return new ArgumentBinding(name, new ArgumentValue(ArgumentValueType.NODE_RESULT, null, sourceNodeId));
     }
 
-    private static Budget budget(long maxTokens, long maxToolCalls) {
-        return budget(maxTokens, maxToolCalls, Duration.ofMinutes(1));
+    private static Budget budget(long maxTokens, long maxAgentInvocations) {
+        return budget(maxTokens, maxAgentInvocations, Duration.ofMinutes(1));
     }
 
-    private static Budget budget(long maxTokens, long maxToolCalls, Duration maxWallClock) {
+    private static Budget budget(long maxTokens, long maxAgentInvocations, Duration maxWallClock) {
         return new Budget(
-                new BudgetLimits(maxTokens, maxToolCalls, maxWallClock, new BigDecimal("100.00")),
+                new BudgetLimits(maxTokens, maxAgentInvocations, maxWallClock, new BigDecimal("100.00")),
                 new ModelPricing("test-model", BigDecimal.ZERO, BigDecimal.ZERO));
     }
 
-    private static final class RecordingToolExecutor extends Lg4jToolExecutor {
+    private static Lg4jEvidenceAnalysisNode evidenceAnalysisNode() {
+        return new Lg4jEvidenceAnalysisNode(new EvidenceCorrelationAgent(), new HypothesisAssessmentAgent());
+    }
 
-        private final List<ToolCall> calls = new ArrayList<>();
-        private final String failingTool;
+    private static Lg4jAgentExecutor agentExecutor() {
+        return new Lg4jAgentExecutor(new MetricsAgent(), new LogsAgent(), new TracesAgent(), new DeploymentsAgent(),
+                new ConfigChangesAgent(), new MetricComparisonAgent(), new LogSignatureAgent());
+    }
 
-        private RecordingToolExecutor() {
+    private static class RecordingAgentExecutor extends Lg4jAgentExecutor {
+
+        private final List<AgentInvocation> calls = Collections.synchronizedList(new ArrayList<>());
+        private final String failingAgent;
+
+        private RecordingAgentExecutor() {
             this(null);
         }
 
-        private RecordingToolExecutor(String failingTool) {
-            super(new Lg4jTools());
-            this.failingTool = failingTool;
+        private RecordingAgentExecutor(String failingAgent) {
+            super(new MetricsAgent(), new LogsAgent(), new TracesAgent(), new DeploymentsAgent(),
+                    new ConfigChangesAgent(), new MetricComparisonAgent(), new LogSignatureAgent());
+            this.failingAgent = failingAgent;
         }
 
         @Override
-        ToolExecutionResult execute(String name, Map<String, Object> args) {
+        AgentResponse execute(String name, Map<String, Object> args) {
             var safeArgs = args == null ? Map.<String, Object>of() : new HashMap<>(args);
-            calls.add(new ToolCall(name, safeArgs));
-            if (name.equals(failingTool)) {
+            calls.add(new AgentInvocation(name, safeArgs));
+            if (name.equals(failingAgent)) {
                 throw new IllegalStateException("planned failure: " + name);
             }
             return super.execute(name, safeArgs);
@@ -340,41 +348,40 @@ class Lg4jPlanExecutorTests {
 
         private Map<String, Object> argsFor(String nodeId) {
             return switch (nodeId) {
-                case "comparison", "baselineComparison", "recentComparison" -> callsTo(COMPARE_PERIODS).stream()
+                case "comparison", "baselineComparison", "recentComparison" -> callsTo(METRIC_COMPARISON_AGENT).stream()
                         .filter(call -> nodeId.equals("comparison")
                                 || "13:00".equals(call.args().get(ARG_BASELINE_FROM))
                                 && "baselineComparison".equals(nodeId)
                                 || "14:00".equals(call.args().get(ARG_BASELINE_FROM))
                                 && "recentComparison".equals(nodeId))
-                        .map(ToolCall::args)
+                        .map(AgentInvocation::args)
                         .findFirst()
                         .orElseThrow();
-                case "signature" -> callsTo(FIND_LOG_SIGNATURE).getFirst().args();
+                case "signature" -> callsTo(LOG_SIGNATURE_AGENT).getFirst().args();
                 default -> throw new IllegalArgumentException("unknown recorded node: " + nodeId);
             };
         }
 
-        private List<ToolCall> callsTo(String tool) {
-            return calls.stream()
-                    .filter(call -> call.tool().equals(tool))
+        private List<AgentInvocation> callsTo(String agent) {
+            return new ArrayList<>(calls).stream()
+                    .filter(call -> call.agent().equals(agent))
                     .toList();
         }
     }
 
-    private record ToolCall(String tool, Map<String, Object> args) {
+    private record AgentInvocation(String agent, Map<String, Object> args) {
     }
 
-    private static final class SlowToolExecutor extends Lg4jToolExecutor {
+    private static final class SlowAgentExecutor extends RecordingAgentExecutor {
 
         private final Duration delay;
 
-        private SlowToolExecutor(Duration delay) {
-            super(new Lg4jTools());
+        private SlowAgentExecutor(Duration delay) {
             this.delay = delay;
         }
 
         @Override
-        ToolExecutionResult execute(String name, Map<String, Object> args) {
+        AgentResponse execute(String name, Map<String, Object> args) {
             try {
                 Thread.sleep(delay);
             } catch (InterruptedException exception) {

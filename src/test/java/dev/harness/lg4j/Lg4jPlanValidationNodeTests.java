@@ -11,11 +11,11 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import static dev.harness.lg4j.Lg4jAgentSpecs.ARG_METRIC_SERIES;
+import static dev.harness.lg4j.Lg4jAgentSpecs.METRICS_AGENT;
+import static dev.harness.lg4j.Lg4jAgentSpecs.METRIC_COMPARISON_AGENT;
+import static dev.harness.lg4j.Lg4jAgentSpecs.TRACES_AGENT;
 import static org.assertj.core.api.Assertions.assertThat;
-import static dev.harness.agent.tools.IncidentInvestigationTools.ARG_METRIC_SERIES;
-import static dev.harness.agent.tools.IncidentInvestigationTools.COMPARE_PERIODS;
-import static dev.harness.agent.tools.IncidentInvestigationTools.QUERY_PROMETHEUS;
-import static dev.harness.agent.tools.IncidentInvestigationTools.QUERY_TEMPO;
 
 class Lg4jPlanValidationNodeTests {
 
@@ -25,18 +25,18 @@ class Lg4jPlanValidationNodeTests {
     void rejectsRuntimeTailNodesFromPlannerOutput() {
         var result = validationNode.validate(new Lg4jRunState(Map.of(
                 Lg4jRunState.PLAN,
-                new Plan(List.of(new PlanNode("report", "build_incident_report", List.of()))))));
+                new Plan(List.of(new PlanNode("report", "IncidentReportAgent", List.of()))))));
 
         assertThat(result)
                 .containsEntry(Lg4jRunState.STATUS, RunStatus.FAILED_VALIDATION)
-                .containsEntry(Lg4jRunState.ERROR, "unknown evidence tool: build_incident_report");
+                .containsEntry(Lg4jRunState.ERROR, "unknown evidence agent: IncidentReportAgent");
     }
 
     @Test
     void rejectsRawTerminalEvidenceNodes() {
         var result = validationNode.validate(new Lg4jRunState(Map.of(
                 Lg4jRunState.PLAN,
-                new Plan(List.of(new PlanNode("metrics", "query_prometheus", List.of()))))));
+                new Plan(List.of(new PlanNode("metrics", METRICS_AGENT, List.of()))))));
 
         assertThat(result)
                 .containsEntry(Lg4jRunState.STATUS, RunStatus.FAILED_VALIDATION)
@@ -45,10 +45,10 @@ class Lg4jPlanValidationNodeTests {
     }
 
     @Test
-    void acceptsTerminalToolsFromCatalog() {
+    void acceptsTerminalAgentsFromCatalog() {
         var result = validationNode.validate(new Lg4jRunState(Map.of(
                 Lg4jRunState.PLAN,
-                new Plan(List.of(new PlanNode("traces", "query_tempo", List.of()))))));
+                new Plan(List.of(new PlanNode("traces", TRACES_AGENT, List.of()))))));
 
         assertThat(result).isEmpty();
     }
@@ -58,8 +58,8 @@ class Lg4jPlanValidationNodeTests {
         var result = validationNode.validate(new Lg4jRunState(Map.of(
                 Lg4jRunState.PLAN,
                 new Plan(List.of(
-                        new PlanNode("metrics", QUERY_PROMETHEUS, List.of()),
-                        new PlanNode("comparison", COMPARE_PERIODS,
+                        new PlanNode("metrics", METRICS_AGENT, List.of()),
+                        new PlanNode("comparison", METRIC_COMPARISON_AGENT,
                                 List.of(ref(ARG_METRIC_SERIES, "metrics")), List.of("metrics")))))));
 
         assertThat(result).isEmpty();
@@ -68,8 +68,8 @@ class Lg4jPlanValidationNodeTests {
     @Test
     void rejectsDuplicatePlannerNodeIds() {
         var result = validate(new Plan(List.of(
-                new PlanNode("traces", QUERY_TEMPO, List.of()),
-                new PlanNode("traces", QUERY_TEMPO, List.of()))));
+                new PlanNode("traces", TRACES_AGENT, List.of()),
+                new PlanNode("traces", TRACES_AGENT, List.of()))));
 
         assertValidationError(result, "duplicate plan node id: traces");
     }
@@ -77,7 +77,7 @@ class Lg4jPlanValidationNodeTests {
     @Test
     void rejectsUnknownPlannerDependency() {
         var result = validate(new Plan(List.of(
-                new PlanNode("comparison", COMPARE_PERIODS, List.of("missing")))));
+                new PlanNode("comparison", METRIC_COMPARISON_AGENT, List.of("missing")))));
 
         assertValidationError(result, "unknown dependency 'missing' in node 'comparison'");
     }
@@ -85,8 +85,8 @@ class Lg4jPlanValidationNodeTests {
     @Test
     void rejectsPlannerDependencyCycles() {
         var result = validate(new Plan(List.of(
-                new PlanNode("metrics", QUERY_PROMETHEUS, List.of("comparison")),
-                new PlanNode("comparison", COMPARE_PERIODS, List.of("metrics")))));
+                new PlanNode("metrics", METRICS_AGENT, List.of("comparison")),
+                new PlanNode("comparison", METRIC_COMPARISON_AGENT, List.of("metrics")))));
 
         assertValidationError(result, "plan contains dependency cycle at node: metrics");
     }
@@ -94,7 +94,7 @@ class Lg4jPlanValidationNodeTests {
     @Test
     void rejectsBlankNodeResultSource() {
         var result = validate(new Plan(List.of(
-                new PlanNode("comparison", COMPARE_PERIODS,
+                new PlanNode("comparison", METRIC_COMPARISON_AGENT,
                         List.of(ref(ARG_METRIC_SERIES, "")), List.of()))));
 
         assertValidationError(result, "NODE_RESULT sourceNodeId must not be blank in node comparison");
@@ -103,7 +103,7 @@ class Lg4jPlanValidationNodeTests {
     @Test
     void rejectsUnknownNodeResultSource() {
         var result = validate(new Plan(List.of(
-                new PlanNode("comparison", COMPARE_PERIODS,
+                new PlanNode("comparison", METRIC_COMPARISON_AGENT,
                         List.of(ref(ARG_METRIC_SERIES, "missing")), List.of()))));
 
         assertValidationError(result, "unknown NODE_RESULT source 'missing' in node 'comparison'");
@@ -112,8 +112,8 @@ class Lg4jPlanValidationNodeTests {
     @Test
     void rejectsNodeResultSourceMissingFromDeps() {
         var result = validate(new Plan(List.of(
-                new PlanNode("metrics", QUERY_PROMETHEUS, List.of()),
-                new PlanNode("comparison", COMPARE_PERIODS,
+                new PlanNode("metrics", METRICS_AGENT, List.of()),
+                new PlanNode("comparison", METRIC_COMPARISON_AGENT,
                         List.of(ref(ARG_METRIC_SERIES, "metrics")), List.of()))));
 
         assertValidationError(result, "NODE_RESULT source 'metrics' must be listed in deps for node 'comparison'");
@@ -128,10 +128,10 @@ class Lg4jPlanValidationNodeTests {
 
     @Test
     void exposesTerminalMetadataInPromptCatalog() {
-        assertThat(Lg4jToolSpecs.promptCatalog())
-                .contains("query_prometheus(service, metric, from, to) -> PrometheusQueryResult role=EVIDENCE terminal=false")
-                .contains("query_tempo(service, query, from, to) -> TempoQueryResult role=EVIDENCE terminal=true")
-                .contains("compare_periods(metricSeries, baselineFrom, baselineTo, incidentFrom, incidentTo) -> PeriodComparison role=ANALYSIS terminal=true");
+        assertThat(Lg4jAgentSpecs.promptCatalog())
+                .contains("MetricsAgent(service, metric, from, to) -> PrometheusQueryResult role=EVIDENCE terminal=false")
+                .contains("TracesAgent(service, query, from, to) -> TempoQueryResult role=EVIDENCE terminal=true")
+                .contains("MetricComparisonAgent(metricSeries, baselineFrom, baselineTo, incidentFrom, incidentTo) -> PeriodComparison role=ANALYSIS terminal=true");
     }
 
     private Map<String, Object> validate(Plan plan) {

@@ -5,7 +5,7 @@ import java.time.Duration;
 
 public record BudgetLimits(
         long maxTokens,
-        long maxToolCalls,
+        long maxAgentInvocations,
         Duration maxWallClock,
         BigDecimal maxEstimatedCostUsd
 ) {
@@ -14,8 +14,8 @@ public record BudgetLimits(
         if (maxTokens <= 0) {
             throw new IllegalArgumentException("maxTokens must be positive");
         }
-        if (maxToolCalls <= 0) {
-            throw new IllegalArgumentException("maxToolCalls must be positive");
+        if (maxAgentInvocations <= 0) {
+            throw new IllegalArgumentException("maxAgentInvocations must be positive");
         }
         if (maxWallClock == null || maxWallClock.isZero() || maxWallClock.isNegative()) {
             throw new IllegalArgumentException("maxWallClock must be positive");

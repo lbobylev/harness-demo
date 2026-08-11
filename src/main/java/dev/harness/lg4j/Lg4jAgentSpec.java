@@ -1,8 +1,8 @@
 package dev.harness.lg4j;
 
-record Lg4jToolSpec(
+record Lg4jAgentSpec(
         String name,
-        String parameters,
+        String arguments,
         String resultType,
         String role,
         boolean terminal
@@ -10,6 +10,6 @@ record Lg4jToolSpec(
 
     String promptLine() {
         return "%s(%s) -> %s role=%s terminal=%s"
-                .formatted(name, parameters, resultType, role, terminal);
+                .formatted(name, arguments, resultType, role, terminal);
     }
 }

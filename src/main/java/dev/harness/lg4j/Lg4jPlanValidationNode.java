@@ -54,11 +54,11 @@ class Lg4jPlanValidationNode {
             if (!ids.add(node.getId())) {
                 return "duplicate plan node id: " + node.getId();
             }
-            if (node.getTool() == null || node.getTool().isBlank()) {
-                return "plan node tool must not be blank: " + node.getId();
+            if (node.getAgent() == null || node.getAgent().isBlank()) {
+                return "plan node agent must not be blank: " + node.getId();
             }
-            if (!Lg4jToolSpecs.names().contains(node.getTool())) {
-                return "unknown evidence tool: " + node.getTool();
+            if (!Lg4jAgentSpecs.names().contains(node.getAgent())) {
+                return "unknown evidence agent: " + node.getAgent();
             }
         }
 
@@ -80,7 +80,7 @@ class Lg4jPlanValidationNode {
             return "plan must contain at least one terminal evidence node";
         }
         for (var terminalNode : terminalNodes) {
-            if (!Lg4jToolSpecs.terminalNames().contains(terminalNode.getTool())) {
+            if (!Lg4jAgentSpecs.terminalNames().contains(terminalNode.getAgent())) {
                 return "terminal evidence node must produce analysis-ready evidence: " + terminalNode.getId();
             }
         }

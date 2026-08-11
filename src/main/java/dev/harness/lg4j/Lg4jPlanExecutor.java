@@ -6,7 +6,7 @@ import dev.harness.agent.plan.ArgumentValueType;
 import dev.harness.agent.plan.NodeStatus;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.plan.PlanNode;
-import dev.harness.agent.tools.ToolExecutionResult;
+import dev.harness.agent.execution.AgentResponse;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.RunnableConfig;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,16 +31,16 @@ class Lg4jPlanExecutor {
     private static final String DEPENDENCY_FAILED = "dependency failed";
     private static final String BUDGET_EXHAUSTED = "budget exhausted";
 
-    private final Lg4jToolExecutor toolExecutor;
+    private final Lg4jAgentExecutor agentExecutor;
     private final Lg4jEvidenceAnalysisNode evidenceAnalysisNode;
     private final int maxConcurrency;
     private final Lg4jPlanGraphBuilder graphBuilder = new Lg4jPlanGraphBuilder();
 
     Lg4jPlanExecutor(
-            Lg4jToolExecutor toolExecutor,
+            Lg4jAgentExecutor agentExecutor,
             Lg4jEvidenceAnalysisNode evidenceAnalysisNode,
             @Value("${harness.execution.max-concurrency:5}") int maxConcurrency) {
-        this.toolExecutor = toolExecutor;
+        this.agentExecutor = agentExecutor;
         this.evidenceAnalysisNode = evidenceAnalysisNode;
         this.maxConcurrency = Math.max(1, maxConcurrency);
     }
@@ -53,13 +53,13 @@ class Lg4jPlanExecutor {
             throw new IllegalArgumentException("budget must not be null");
         }
         ExecutorService graphExecutor = Executors.newVirtualThreadPerTaskExecutor();
-        ExecutorService toolCallExecutor = Executors.newVirtualThreadPerTaskExecutor();
+            ExecutorService agentInvocationExecutor = Executors.newVirtualThreadPerTaskExecutor();
         try {
             var semaphore = new Semaphore(maxConcurrency);
             return graphBuilder
                     .build(plan,
-                            node -> node_async(state -> executeNode(budget, semaphore, toolCallExecutor, node, state)),
-                            node_async(state -> analyzeEvidence(plan, budget, toolCallExecutor, state)))
+                            node -> node_async(state -> executeNode(budget, semaphore, agentInvocationExecutor, node, state)),
+                            node_async(state -> analyzeEvidence(plan, budget, agentInvocationExecutor, state)))
                     .compile()
                     .invoke(initialState(budget), parallelConfig(plan, graphExecutor))
                     .orElseThrow(() -> new IllegalStateException("LangGraph4j plan graph returned no final state"));
@@ -70,7 +70,7 @@ class Lg4jPlanExecutor {
                     exception);
         } finally {
             graphExecutor.shutdownNow();
-            toolCallExecutor.shutdownNow();
+            agentInvocationExecutor.shutdownNow();
         }
     }
 
@@ -87,7 +87,7 @@ class Lg4jPlanExecutor {
     private Map<String, Object> executeNode(
             Budget budget,
             Semaphore semaphore,
-            ExecutorService toolCallExecutor,
+            ExecutorService agentInvocationExecutor,
             PlanNode node,
             Lg4jPlanExecutionState state) {
 
@@ -98,7 +98,7 @@ class Lg4jPlanExecutor {
         if (budget.wallClockExhausted()) {
             return stateSkipped(params, BUDGET_EXHAUSTED);
         }
-        if (!budget.tryChargeToolCall()) {
+        if (!budget.tryChargeAgentInvocation()) {
             return stateSkipped(params, BUDGET_EXHAUSTED);
         }
 
@@ -109,7 +109,7 @@ class Lg4jPlanExecutor {
                 return stateSkipped(params, BUDGET_EXHAUSTED);
             }
             acquired = true;
-            var result = executeToolCall(toolCallExecutor, budget, node, state);
+            var result = executeAgentInvocation(agentInvocationExecutor, budget, node, state);
             budget.chargeUsage(result.usage());
             return stateUpdate(new StateParams(state, node.getId(), result.value(), budget), NodeStatus.DONE, null);
         } catch (InterruptedException exception) {
@@ -130,13 +130,13 @@ class Lg4jPlanExecutor {
         }
     }
 
-    private ToolExecutionResult executeToolCall(
-            ExecutorService toolCallExecutor,
+    private AgentResponse executeAgentInvocation(
+            ExecutorService agentInvocationExecutor,
             Budget budget,
             PlanNode node,
             Lg4jPlanExecutionState state) throws InterruptedException, ExecutionException, TimeoutException {
         var args = materializeArguments(node, state);
-        Future<ToolExecutionResult> future = toolCallExecutor.submit(() -> toolExecutor.execute(node.getTool(), args));
+        Future<AgentResponse> future = agentInvocationExecutor.submit(() -> agentExecutor.execute(node.getAgent(), args));
         try {
             return future.get(timeoutNanos(budget), TimeUnit.NANOSECONDS);
         } catch (InterruptedException | TimeoutException exception) {
@@ -148,13 +148,13 @@ class Lg4jPlanExecutor {
     private Map<String, Object> analyzeEvidence(
             Plan plan,
             Budget budget,
-            ExecutorService toolCallExecutor,
+            ExecutorService agentInvocationExecutor,
             Lg4jPlanExecutionState state) {
         var params = new StateParams(state, Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE, null, budget);
         if (budget.wallClockExhausted()) {
             return stateSkipped(params, BUDGET_EXHAUSTED);
         }
-        Future<Map<String, Object>> future = toolCallExecutor.submit(() -> evidenceAnalysisNode.analyze(plan, state));
+        Future<Map<String, Object>> future = agentInvocationExecutor.submit(() -> evidenceAnalysisNode.analyze(plan, state));
         try {
             return future.get(timeoutNanos(budget), TimeUnit.NANOSECONDS);
         } catch (InterruptedException exception) {

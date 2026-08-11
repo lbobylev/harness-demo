@@ -22,9 +22,9 @@ public record Plan(List<PlanNode> nodes) implements Serializable {
         return node.getDeps().stream().map(this::getNodeById).toList();
     }
 
-    public Optional<PlanNode> getDepNodeByTool(PlanNode node, String tool) {
+    public Optional<PlanNode> getDepNodeByAgent(PlanNode node, String agent) {
         return getDepNodes(node).stream()
-                .filter(dep -> dep != null && tool.equals(dep.getTool()))
+                .filter(dep -> dep != null && agent.equals(dep.getAgent()))
                 .findFirst();
     }
 }

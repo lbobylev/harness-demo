@@ -63,9 +63,9 @@ class Lg4jPlanGraphBuilderTests {
     @Test
     void supportsFanInWithinEvidenceDag() throws Exception {
         var plan = new Plan(List.of(
-                node("metrics", "query_prometheus"),
-                node("logs", "query_loki"),
-                node("mixed", "compare_periods", "metrics", "logs")));
+                node("metrics", Lg4jAgentSpecs.METRICS_AGENT),
+                node("logs", Lg4jAgentSpecs.LOGS_AGENT),
+                node("mixed", Lg4jAgentSpecs.METRIC_COMPARISON_AGENT, "metrics", "logs")));
 
         var state = invoke(plan, doneAction());
 
@@ -125,15 +125,15 @@ class Lg4jPlanGraphBuilderTests {
 
     private static Plan structuredPlan() {
         return new Plan(List.of(
-                node("metrics", "query_prometheus"),
-                node("compare", "compare_periods", "metrics"),
-                node("logs", "query_loki"),
-                node("signature", "find_log_signature", "logs"),
-                node("traces", "query_tempo")
+                node("metrics", Lg4jAgentSpecs.METRICS_AGENT),
+                node("compare", Lg4jAgentSpecs.METRIC_COMPARISON_AGENT, "metrics"),
+                node("logs", Lg4jAgentSpecs.LOGS_AGENT),
+                node("signature", Lg4jAgentSpecs.LOG_SIGNATURE_AGENT, "logs"),
+                node("traces", Lg4jAgentSpecs.TRACES_AGENT)
         ));
     }
 
-    private static PlanNode node(String id, String tool, String... deps) {
-        return new PlanNode(id, tool, List.of(deps));
+    private static PlanNode node(String id, String agent, String... deps) {
+        return new PlanNode(id, agent, List.of(deps));
     }
 }

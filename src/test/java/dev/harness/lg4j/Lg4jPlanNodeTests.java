@@ -24,7 +24,7 @@ class Lg4jPlanNodeTests {
     @Test
     void chargesPlanningUsageToRunBudget() {
         var budget = budget(100, 10);
-        var plan = new Plan(List.of(new PlanNode("metrics", "query_prometheus", List.of())));
+        var plan = new Plan(List.of(new PlanNode("metrics", Lg4jAgentSpecs.METRICS_AGENT, List.of())));
         var planner = mock(Lg4jPlanner.class);
         when(planner.plan("investigate", null))
                 .thenReturn(new Lg4jPlanningResult(plan, new AiUsage("test-model", 6, 4, 10)));
@@ -41,7 +41,7 @@ class Lg4jPlanNodeTests {
     @Test
     void stopsWhenPlanningExhaustsBudget() {
         var budget = budget(10, 10);
-        var plan = new Plan(List.of(new PlanNode("metrics", "query_prometheus", List.of())));
+        var plan = new Plan(List.of(new PlanNode("metrics", Lg4jAgentSpecs.METRICS_AGENT, List.of())));
         var planner = mock(Lg4jPlanner.class);
         when(planner.plan("investigate", null))
                 .thenReturn(new Lg4jPlanningResult(plan, new AiUsage("test-model", 8, 4, 12)));
@@ -63,9 +63,9 @@ class Lg4jPlanNodeTests {
                 Lg4jRunState.BUDGET, budget.snapshot()));
     }
 
-    private static Budget budget(long maxTokens, long maxToolCalls) {
+    private static Budget budget(long maxTokens, long maxAgentInvocations) {
         return new Budget(
-                new BudgetLimits(maxTokens, maxToolCalls, Duration.ofMinutes(1), new BigDecimal("100.00")),
+                new BudgetLimits(maxTokens, maxAgentInvocations, Duration.ofMinutes(1), new BigDecimal("100.00")),
                 new ModelPricing("test-model", BigDecimal.ZERO, BigDecimal.ZERO));
     }
 }

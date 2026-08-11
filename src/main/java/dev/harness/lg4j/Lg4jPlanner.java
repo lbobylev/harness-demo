@@ -18,20 +18,21 @@ class Lg4jPlanner {
             Return only the structured Plan object requested by the API.
 
             Rules:
-            - Use only tools listed in the tool catalog.
-            - Nodes are tool calls.
+            - Use only agents listed in AVAILABLE AGENTS.
+            - Nodes are agent invocations.
             - deps are execution dependencies.
             - arguments are explicit data bindings.
             - Use LITERAL for values known from the user goal.
             - Use NODE_RESULT for values produced by another node.
             - Every NODE_RESULT sourceNodeId must also appear in deps.
-            - Every required tool argument from the catalog must appear explicitly.
+            - Every required agent argument from the catalog must appear explicitly.
             - Return only evidence collection and local evidence analysis before fan-in.
-            - Read terminal=true or terminal=false from AVAILABLE TOOLS.
-            - The Plan may contain any acyclic dependency graph over AVAILABLE TOOLS.
-            - Every terminal node must use a tool marked terminal=true.
-            - Tools marked terminal=false may only be intermediate DAG nodes.
-            - Do not create tools or runtime synthesis/report nodes that are not listed in AVAILABLE TOOLS.
+            - Read terminal=true or terminal=false from AVAILABLE AGENTS.
+            - Build an acyclic DAG consistent with the agent signatures and result flow.
+            - The Plan may contain any acyclic dependency graph over AVAILABLE AGENTS.
+            - Every terminal node must use an agent marked terminal=true.
+            - Agents marked terminal=false may only be intermediate DAG nodes.
+            - Do not create agents or runtime synthesis/report nodes that are not listed in AVAILABLE AGENTS.
             - The runtime will fan in all terminal nodes, then deterministically analyze evidence and build the report.
             - Do not return Java code or a generic action protocol.
             """;
@@ -69,9 +70,9 @@ class Lg4jPlanner {
                 GOAL:
                 %s
 
-                AVAILABLE TOOLS:
+                AVAILABLE AGENTS:
                 %s
-                """.formatted(goal, Lg4jToolSpecs.promptCatalog());
+                """.formatted(goal, Lg4jAgentSpecs.promptCatalog());
         if (failureContext == null || failureContext.isBlank()) {
             return prompt;
         }

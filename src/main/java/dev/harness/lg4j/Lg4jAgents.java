@@ -20,47 +20,68 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
-class Lg4jTools {
+class MetricsAgent {
 
-    PrometheusQueryResult queryPrometheus(String service, String metric, String from, String to) {
-        var safeService = defaultText(service, "checkout-service");
-        var safeMetric = defaultText(metric, "5xx_rate");
+    PrometheusQueryResult query(String service, String metric, String from, String to) {
+        var safeService = Lg4jAgentDefaults.text(service, "checkout-service");
+        var safeMetric = Lg4jAgentDefaults.text(metric, "5xx_rate");
         var series = new MetricSeries("metric.%s.%s".formatted(safeService, safeMetric), safeService, safeMetric,
                 List.of(
                         new MetricPoint("metric-point-1", "14:30", 0.01),
                         new MetricPoint("metric-point-2", "14:35", 0.22),
                         new MetricPoint("metric-point-3", "14:40", 0.31)));
-        return new PrometheusQueryResult(safeService, safeMetric, defaultText(from, "14:30"), defaultText(to, "14:45"), series);
+        return new PrometheusQueryResult(safeService, safeMetric,
+                Lg4jAgentDefaults.text(from, "14:30"), Lg4jAgentDefaults.text(to, "14:45"), series);
     }
+}
 
-    LokiQueryResult queryLoki(String service, String query, String from, String to) {
-        var safeService = defaultText(service, "checkout-service");
-        return new LokiQueryResult(safeService, defaultText(query, "error timeout"), defaultText(from, "14:30"),
-                defaultText(to, "14:45"), List.of(
+@Component
+class LogsAgent {
+
+    LokiQueryResult query(String service, String query, String from, String to) {
+        var safeService = Lg4jAgentDefaults.text(service, "checkout-service");
+        return new LokiQueryResult(safeService, Lg4jAgentDefaults.text(query, "error timeout"),
+                Lg4jAgentDefaults.text(from, "14:30"), Lg4jAgentDefaults.text(to, "14:45"), List.of(
                 new LogEvent("log-1", "14:33", safeService, "ERROR", "4.18.2", "catalog-service timeout"),
                 new LogEvent("log-2", "14:36", safeService, "ERROR", "4.18.2", "catalog-service timeout"),
                 new LogEvent("log-3", "14:39", safeService, "WARN", "4.18.2", "slow catalog response")));
     }
+}
 
-    TempoQueryResult queryTempo(String service, String query, String from, String to) {
-        var safeService = defaultText(service, "checkout-service");
-        return new TempoQueryResult(safeService, defaultText(query, "catalog"), defaultText(from, "14:30"),
-                defaultText(to, "14:45"), List.of(
+@Component
+class TracesAgent {
+
+    TempoQueryResult query(String service, String query, String from, String to) {
+        var safeService = Lg4jAgentDefaults.text(service, "checkout-service");
+        return new TempoQueryResult(safeService, Lg4jAgentDefaults.text(query, "catalog"),
+                Lg4jAgentDefaults.text(from, "14:30"), Lg4jAgentDefaults.text(to, "14:45"), List.of(
                 new TraceSpan("span-1", "trace-1", "14:35", safeService, "checkout", "GET /checkout",
                         "catalog-service", 1800, "ERROR", "downstream timeout")));
     }
+}
 
-    List<DeploymentEvent> getDeployments(String service, String from, String to) {
-        var safeService = defaultText(service, "checkout-service");
+@Component
+class DeploymentsAgent {
+
+    List<DeploymentEvent> query(String service, String from, String to) {
+        var safeService = Lg4jAgentDefaults.text(service, "checkout-service");
         return List.of(new DeploymentEvent("deploy-1", "14:28", safeService, "4.18.2", "change-1"));
     }
+}
 
-    List<ConfigChange> getConfigChanges(String service, String from, String to) {
-        var safeService = defaultText(service, "checkout-service");
+@Component
+class ConfigChangesAgent {
+
+    List<ConfigChange> query(String service, String from, String to) {
+        var safeService = Lg4jAgentDefaults.text(service, "checkout-service");
         return List.of(new ConfigChange("config-1", "14:29", safeService, "catalog.timeout.ms", "1000", "250"));
     }
+}
 
-    PeriodComparison comparePeriods(
+@Component
+class MetricComparisonAgent {
+
+    PeriodComparison compare(
             PrometheusQueryResult metricSeries,
             String baselineFrom,
             String baselineTo,
@@ -72,27 +93,20 @@ class Lg4jTools {
         return new PeriodComparison(metricId, 0.01, 0.28, 0.27, "INCREASED",
                 List.of("metric-point-1", "metric-point-2", "metric-point-3"));
     }
+}
 
-    LogSignature findLogSignature(LokiQueryResult logs) {
+@Component
+class LogSignatureAgent {
+
+    LogSignature find(LokiQueryResult logs) {
         var service = logs == null ? "checkout-service" : logs.service();
         return new LogSignature("catalog-service timeout", "14:33", 3, "ERROR", service,
                 List.of("log-1", "log-2", "log-3"));
     }
+}
 
-    EvidenceBundle assembleEvidence(
-            PeriodComparison metricComparison,
-            LogSignature logSignature,
-            TempoQueryResult traces,
-            List<DeploymentEvent> deployments,
-            List<ConfigChange> configChanges) {
-        return new EvidenceBundle(
-                List.of(metricComparison == null ? comparePeriods(null, null, null, null, null) : metricComparison),
-                List.of(logSignature == null ? findLogSignature(null) : logSignature),
-                List.of(traces == null ? queryTempo(null, null, null, null) : traces),
-                deployments == null || deployments.isEmpty() ? getDeployments(null, null, null) : deployments,
-                configChanges == null || configChanges.isEmpty() ? getConfigChanges(null, null, null) : configChanges,
-                List.of("metric-point-1", "log-1", "span-1", "deploy-1", "config-1"));
-    }
+@Component
+class EvidenceCorrelationAgent {
 
     CorrelationResult correlate(EvidenceBundle evidence) {
         var evidenceIds = evidence == null ? List.of("metric-point-1", "log-1", "span-1") : evidence.evidenceIds();
@@ -108,10 +122,14 @@ class Lg4jTools {
                 List.of("database degradation was not observed"),
                 evidenceIds);
     }
+}
 
-    HypothesisAssessment testHypothesis(String hypothesis, CorrelationResult evidence) {
+@Component
+class HypothesisAssessmentAgent {
+
+    HypothesisAssessment assess(String hypothesis, CorrelationResult evidence) {
         return new HypothesisAssessment(
-                defaultText(hypothesis, "catalog-service latency caused checkout-service 5xx"),
+                Lg4jAgentDefaults.text(hypothesis, "catalog-service latency caused checkout-service 5xx"),
                 "STRONG",
                 0.89,
                 List.of(
@@ -123,12 +141,16 @@ class Lg4jTools {
                 "SUPPORTED",
                 evidence == null ? List.of("metric-point-1", "log-1", "span-1") : evidence.evidenceIds());
     }
+}
 
-    IncidentReport buildIncidentReport(String incident, HypothesisAssessment hypothesisAssessment, CorrelationResult evidence) {
+@Component
+class IncidentReportAgent {
+
+    IncidentReport build(String incident, HypothesisAssessment hypothesisAssessment, CorrelationResult evidence) {
         return new IncidentReport(
                 "catalog-service degradation caused checkout-service 5xx through downstream timeouts",
                 0.89,
-                evidence == null ? correlate(null).timeline() : evidence.timeline(),
+                evidence == null ? new EvidenceCorrelationAgent().correlate(null).timeline() : evidence.timeline(),
                 List.of(
                         "5xx_rate increased during the incident window",
                         "logs repeatedly show catalog-service timeout",
@@ -136,8 +158,14 @@ class Lg4jTools {
                 List.of("checkout deployment regression", "database degradation"),
                 "Mitigate catalog-service degradation or temporarily degrade checkout catalog enrichment path");
     }
+}
 
-    private static String defaultText(String value, String fallback) {
+final class Lg4jAgentDefaults {
+
+    private Lg4jAgentDefaults() {
+    }
+
+    static String text(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
     }
 }

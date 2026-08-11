@@ -10,8 +10,8 @@ public record BudgetSnapshot(
         Duration elapsed,
         long tokensUsed,
         long maxTokens,
-        long toolCallsUsed,
-        long maxToolCalls,
+        long agentInvocationsUsed,
+        long maxAgentInvocations,
         BigDecimal estimatedCostUsd,
         BigDecimal maxEstimatedCostUsd,
         double pressure

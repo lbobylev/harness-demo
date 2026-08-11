@@ -9,10 +9,10 @@ import java.util.Map;
 @Component
 class Lg4jReportNode {
 
-    private final Lg4jTools tools;
+    private final IncidentReportAgent incidentReportAgent;
 
-    Lg4jReportNode(Lg4jTools tools) {
-        this.tools = tools;
+    Lg4jReportNode(IncidentReportAgent incidentReportAgent) {
+        this.incidentReportAgent = incidentReportAgent;
     }
 
     Map<String, Object> build(Lg4jRunState state) {
@@ -26,7 +26,7 @@ class Lg4jReportNode {
         }
 
         try {
-            var report = tools.buildIncidentReport(
+            var report = incidentReportAgent.build(
                     state.goal().orElse(""),
                     analysis.hypothesisAssessment(),
                     analysis.correlation());
