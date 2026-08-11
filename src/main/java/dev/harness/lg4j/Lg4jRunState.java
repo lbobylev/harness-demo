@@ -1,5 +1,6 @@
 package dev.harness.lg4j;
 
+import dev.harness.agent.budget.Budget;
 import dev.harness.agent.budget.BudgetSnapshot;
 import dev.harness.agent.incident.IncidentReport;
 import dev.harness.agent.plan.Plan;
@@ -18,6 +19,7 @@ final class Lg4jRunState extends AgentState {
     static final String SESSION_ID = "sessionId";
     static final String RUN_ID = "runId";
     static final String PLAN = "plan";
+    static final String BUDGET_RUNTIME = "budgetRuntime";
     static final String BUDGET = "budget";
     static final String FAILURE_CONTEXT = "failureContext";
     static final String STATUS = "status";
@@ -52,6 +54,10 @@ final class Lg4jRunState extends AgentState {
 
     Optional<BudgetSnapshot> budget() {
         return value(BUDGET);
+    }
+
+    Optional<Budget> runtimeBudget() {
+        return value(BUDGET_RUNTIME);
     }
 
     Optional<String> failureContext() {

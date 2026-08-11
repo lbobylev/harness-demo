@@ -26,6 +26,8 @@ public class Lg4jHarnessRunner {
 
     private final Lg4jPlanNode planNode;
 
+    private final Lg4jBudgetFactory budgetFactory;
+
     private final Lg4jPlanValidationNode validateNode;
 
     private final Lg4jPlanExecutionNode executionNode;
@@ -37,12 +39,14 @@ public class Lg4jHarnessRunner {
     private final Lg4jFinishNode finishNode;
 
     public Lg4jHarnessRunner(
+            Lg4jBudgetFactory budgetFactory,
             Lg4jPlanNode planNode,
             Lg4jPlanValidationNode validateNode,
             Lg4jPlanExecutionNode executionNode,
             Lg4jReportNode reportNode,
             Lg4jVerificationNode verificationNode,
             Lg4jFinishNode finishNode) {
+        this.budgetFactory = budgetFactory;
         this.planNode = planNode;
         this.validateNode = validateNode;
         this.executionNode = executionNode;
@@ -81,13 +85,16 @@ public class Lg4jHarnessRunner {
                 .addEdge("finish", END);
     }
 
-    private static Map<String, Object> initialState(RunRequest request) {
+    private Map<String, Object> initialState(RunRequest request) {
+        var budget = budgetFactory.create();
         var state = new HashMap<String, Object>();
         state.put(Lg4jRunState.GOAL, request == null || request.goal() == null ? "" : request.goal());
         if (request != null && request.sessionId() != null) {
             state.put(Lg4jRunState.SESSION_ID, request.sessionId());
         }
         state.put(Lg4jRunState.RUN_ID, UUID.randomUUID().toString());
+        state.put(Lg4jRunState.BUDGET_RUNTIME, budget);
+        state.put(Lg4jRunState.BUDGET, budget.snapshot());
         return state;
     }
 

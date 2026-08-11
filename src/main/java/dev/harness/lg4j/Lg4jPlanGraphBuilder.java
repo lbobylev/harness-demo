@@ -6,10 +6,7 @@ import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -36,7 +33,7 @@ final class Lg4jPlanGraphBuilder {
         graph.addEdge(START, FORK);
         graph.addNode(ANALYZE_EVIDENCE, analyzeEvidence);
 
-        var components = components(plan, nodesById);
+        var components = Lg4jPlanDag.components(plan);
         for (int i = 0; i < components.size(); i++) {
             var componentId = COMPONENT_PREFIX + i;
             graph.addNode(componentId, componentGraph(components.get(i), nodesById, nodeAction).compile());
@@ -79,42 +76,6 @@ final class Lg4jPlanGraphBuilder {
         }
 
         return graph;
-    }
-
-    private List<Set<String>> components(Plan plan, Map<String, PlanNode> nodesById) {
-        var remaining = new HashSet<String>(nodesById.keySet());
-        var components = new ArrayList<Set<String>>();
-        while (!remaining.isEmpty()) {
-            var start = remaining.iterator().next();
-            var component = new HashSet<String>();
-            var queue = new ArrayDeque<String>();
-            queue.add(start);
-            remaining.remove(start);
-
-            while (!queue.isEmpty()) {
-                var nodeId = queue.removeFirst();
-                component.add(nodeId);
-                for (var neighbor : neighbors(plan, nodesById, nodeId)) {
-                    if (remaining.remove(neighbor)) {
-                        queue.add(neighbor);
-                    }
-                }
-            }
-            components.add(component);
-        }
-        return components;
-    }
-
-    private Set<String> neighbors(Plan plan, Map<String, PlanNode> nodesById, String nodeId) {
-        var neighbors = new HashSet<String>();
-        var node = requireNode(nodesById, nodeId);
-        neighbors.addAll(node.getDeps());
-        for (var candidate : plan.nodes()) {
-            if (candidate.getDeps().contains(nodeId)) {
-                neighbors.add(candidate.getId());
-            }
-        }
-        return neighbors;
     }
 
     private PlanNode requireNode(Map<String, PlanNode> nodesById, String nodeId) {

@@ -1,8 +1,5 @@
 package dev.harness.lg4j;
 
-import dev.harness.agent.budget.Budget;
-import dev.harness.agent.budget.BudgetLimits;
-import dev.harness.agent.budget.ModelPricing;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.plan.NodeStatus;
 import dev.harness.agent.run.ErrorClass;
@@ -10,11 +7,8 @@ import dev.harness.agent.run.RunStatus;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.time.Duration;
 import java.util.Map;
 
 @Component
@@ -23,21 +17,9 @@ class Lg4jPlanExecutionNode {
     private static final Logger log = LoggerFactory.getLogger(Lg4jPlanExecutionNode.class);
 
     private final Lg4jPlanExecutor planExecutor;
-    private final BudgetLimits budgetLimits;
-    private final ModelPricing modelPricing;
 
-    Lg4jPlanExecutionNode(
-            Lg4jPlanExecutor planExecutor,
-            @Value("${harness.budget.max-tokens:20000}") long maxTokens,
-            @Value("${harness.budget.max-tool-calls:50}") long maxToolCalls,
-            @Value("${harness.budget.max-wall-clock:60s}") Duration maxWallClock,
-            @Value("${harness.budget.max-estimated-cost-usd:0.25}") BigDecimal maxEstimatedCostUsd,
-            @Value("${harness.pricing.model:gpt-4.1-mini}") String model,
-            @Value("${harness.pricing.input-token-usd:0.0000004}") BigDecimal inputTokenUsd,
-            @Value("${harness.pricing.output-token-usd:0.0000016}") BigDecimal outputTokenUsd) {
+    Lg4jPlanExecutionNode(Lg4jPlanExecutor planExecutor) {
         this.planExecutor = planExecutor;
-        this.budgetLimits = new BudgetLimits(maxTokens, maxToolCalls, maxWallClock, maxEstimatedCostUsd);
-        this.modelPricing = new ModelPricing(model, inputTokenUsd, outputTokenUsd);
     }
 
     Map<String, Object> execute(Lg4jRunState state) {
@@ -50,7 +32,10 @@ class Lg4jPlanExecutionNode {
             return failure("plan must not be null");
         }
 
-        var budget = new Budget(budgetLimits, modelPricing);
+        var budget = state.runtimeBudget().orElse(null);
+        if (budget == null) {
+            return failure("budget must be present");
+        }
         try {
             var executionState = planExecutor.execute(plan, budget);
             applyExecutionState(plan, executionState);
