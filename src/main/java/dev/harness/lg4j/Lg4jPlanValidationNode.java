@@ -7,7 +7,6 @@ import dev.harness.agent.run.ErrorClass;
 import dev.harness.agent.run.RunStatus;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -45,7 +44,6 @@ class Lg4jPlanValidationNode {
         }
 
         var ids = new HashSet<String>();
-        var nodesById = new HashMap<String, PlanNode>();
         for (var node : plan.nodes()) {
             if (node == null) {
                 return "plan must not contain null nodes";
@@ -62,9 +60,9 @@ class Lg4jPlanValidationNode {
             if (!Lg4jToolSpecs.names().contains(node.getTool())) {
                 return "unknown evidence tool: " + node.getTool();
             }
-            nodesById.put(node.getId(), node);
         }
 
+        var nodesById = Lg4jPlanDag.nodesById(plan);
         for (var node : plan.nodes()) {
             var dependencyError = validateDependencies(node, ids);
             if (dependencyError != null) {
@@ -77,7 +75,7 @@ class Lg4jPlanValidationNode {
             return cycleError;
         }
 
-        var terminalNodes = terminalNodes(plan);
+        var terminalNodes = Lg4jPlanDag.terminals(plan);
         if (terminalNodes.isEmpty()) {
             return "plan must contain at least one terminal evidence node";
         }
@@ -88,20 +86,6 @@ class Lg4jPlanValidationNode {
         }
 
         return null;
-    }
-
-    private static Set<PlanNode> terminalNodes(Plan plan) {
-        var dependencyIds = new HashSet<String>();
-        for (var node : plan.nodes()) {
-            dependencyIds.addAll(node.getDeps());
-        }
-        var terminals = new HashSet<PlanNode>();
-        for (var node : plan.nodes()) {
-            if (!dependencyIds.contains(node.getId())) {
-                terminals.add(node);
-            }
-        }
-        return terminals;
     }
 
     private static String validateDependencies(PlanNode node, Set<String> ids) {

@@ -6,10 +6,10 @@ import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
 
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
@@ -28,6 +28,9 @@ final class Lg4jPlanGraphBuilder {
             AsyncNodeAction<Lg4jPlanExecutionState> analyzeEvidence) throws GraphStateException {
         var graph = new StateGraph<>(Lg4jPlanExecutionState.SCHEMA, Lg4jPlanExecutionState::new);
         var nodesById = Lg4jPlanDag.nodesById(plan);
+        var terminalIds = Lg4jPlanDag.terminals(plan).stream()
+                .map(PlanNode::getId)
+                .collect(Collectors.toSet());
 
         graph.addNode(FORK, node_async(state -> Map.of()));
         graph.addEdge(START, FORK);
@@ -36,7 +39,7 @@ final class Lg4jPlanGraphBuilder {
         var components = Lg4jPlanDag.components(plan);
         for (int i = 0; i < components.size(); i++) {
             var componentId = COMPONENT_PREFIX + i;
-            graph.addNode(componentId, componentGraph(components.get(i), nodesById, nodeAction).compile());
+            graph.addNode(componentId, componentGraph(components.get(i), nodesById, terminalIds, nodeAction).compile());
             graph.addEdge(FORK, componentId);
             graph.addEdge(componentId, ANALYZE_EVIDENCE);
         }
@@ -48,6 +51,7 @@ final class Lg4jPlanGraphBuilder {
     private StateGraph<Lg4jPlanExecutionState> componentGraph(
             Set<String> component,
             Map<String, PlanNode> nodesById,
+            Set<String> terminalIds,
             Function<PlanNode, AsyncNodeAction<Lg4jPlanExecutionState>> nodeAction) throws GraphStateException {
         var graph = new StateGraph<>(Lg4jPlanExecutionState.SCHEMA, Lg4jPlanExecutionState::new);
         var nodes = component.stream().map(nodeId -> requireNode(nodesById, nodeId)).toList();
@@ -67,10 +71,8 @@ final class Lg4jPlanGraphBuilder {
             }
         }
 
-        var dependencyIds = new HashSet<String>();
-        nodes.forEach(node -> dependencyIds.addAll(node.getDeps()));
         for (var node : nodes) {
-            if (!dependencyIds.contains(node.getId())) {
+            if (terminalIds.contains(node.getId())) {
                 graph.addEdge(node.getId(), END);
             }
         }
