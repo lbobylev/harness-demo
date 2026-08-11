@@ -21,12 +21,6 @@ final class Lg4jPlanDag {
         return plan.nodes().stream().collect(Collectors.toMap(PlanNode::getId, Function.identity()));
     }
 
-    static List<PlanNode> roots(Plan plan) {
-        return plan.nodes().stream()
-                .filter(node -> node.getDeps().isEmpty())
-                .toList();
-    }
-
     static List<PlanNode> terminals(Plan plan) {
         var dependencyIds = new HashSet<String>();
         for (var node : plan.nodes()) {
