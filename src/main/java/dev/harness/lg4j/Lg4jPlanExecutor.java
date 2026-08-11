@@ -6,14 +6,23 @@ import dev.harness.agent.plan.ArgumentValueType;
 import dev.harness.agent.plan.NodeStatus;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.plan.PlanNode;
+import dev.harness.agent.tools.ToolExecutionResult;
 import org.bsc.langgraph4j.GraphStateException;
+import org.bsc.langgraph4j.RunnableConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
+import static org.bsc.langgraph4j.StateGraph.START;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 @Component
@@ -43,26 +52,42 @@ class Lg4jPlanExecutor {
         if (budget == null) {
             throw new IllegalArgumentException("budget must not be null");
         }
+        ExecutorService graphExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        ExecutorService toolCallExecutor = Executors.newVirtualThreadPerTaskExecutor();
         try {
             var semaphore = new Semaphore(maxConcurrency);
             return graphBuilder
                     .build(plan,
-                            node -> node_async(state -> executeNode(budget, semaphore, node, state)),
-                            node_async(state -> evidenceAnalysisNode.analyze(plan, state)))
+                            node -> node_async(state -> executeNode(budget, semaphore, toolCallExecutor, node, state)),
+                            node_async(state -> analyzeEvidence(plan, budget, toolCallExecutor, state)))
                     .compile()
-                    .invoke(initialState(budget))
+                    .invoke(initialState(budget), parallelConfig(plan, graphExecutor))
                     .orElseThrow(() -> new IllegalStateException("LangGraph4j plan graph returned no final state"));
         } catch (GraphStateException exception) {
             throw new IllegalStateException(
                     "failed to build LangGraph4j plan graph: plan=%s error=%s"
                             .formatted(Lg4jDebugValue.dump(plan), Lg4jDebugValue.dump(exception)),
                     exception);
+        } finally {
+            graphExecutor.shutdownNow();
+            toolCallExecutor.shutdownNow();
         }
+    }
+
+    private RunnableConfig parallelConfig(Plan plan, ExecutorService executor) {
+        var builder = RunnableConfig.builder()
+                .addParallelNodeExecutor(Lg4jPlanGraphBuilder.FORK, executor)
+                .addParallelNodeExecutor(START, executor);
+        for (var node : plan.nodes()) {
+            builder.addParallelNodeExecutor(node.getId(), executor);
+        }
+        return builder.build();
     }
 
     private Map<String, Object> executeNode(
             Budget budget,
             Semaphore semaphore,
+            ExecutorService toolCallExecutor,
             PlanNode node,
             Lg4jPlanExecutionState state) {
 
@@ -70,27 +95,95 @@ class Lg4jPlanExecutor {
         if (dependencyFailed(node, state)) {
             return stateSkipped(params, DEPENDENCY_FAILED);
         }
+        if (budget.wallClockExhausted()) {
+            return stateSkipped(params, BUDGET_EXHAUSTED);
+        }
         if (!budget.tryChargeToolCall()) {
             return stateSkipped(params, BUDGET_EXHAUSTED);
         }
 
         boolean acquired = false;
         try {
-            semaphore.acquire();
+            var remaining = budget.remainingWallClock();
+            if (remaining.isZero() || !semaphore.tryAcquire(remaining.toNanos(), TimeUnit.NANOSECONDS)) {
+                return stateSkipped(params, BUDGET_EXHAUSTED);
+            }
             acquired = true;
-            var result = toolExecutor.execute(node.getTool(), materializeArguments(node, state));
+            var result = executeToolCall(toolCallExecutor, budget, node, state);
             budget.chargeUsage(result.usage());
             return stateUpdate(new StateParams(state, node.getId(), result.value(), budget), NodeStatus.DONE, null);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            return stateFailed(params, exception.getMessage());
+            return budget.wallClockExhausted()
+                    ? stateSkipped(params, BUDGET_EXHAUSTED)
+                    : stateFailed(params, errorMessage(exception));
+        } catch (TimeoutException exception) {
+            return stateSkipped(params, BUDGET_EXHAUSTED);
+        } catch (ExecutionException exception) {
+            return stateFailed(params, errorMessage(exception.getCause()));
         } catch (Exception exception) {
-            return stateFailed(params, exception.getMessage());
+            return stateFailed(params, errorMessage(exception));
         } finally {
             if (acquired) {
                 semaphore.release();
             }
         }
+    }
+
+    private ToolExecutionResult executeToolCall(
+            ExecutorService toolCallExecutor,
+            Budget budget,
+            PlanNode node,
+            Lg4jPlanExecutionState state) throws InterruptedException, ExecutionException, TimeoutException {
+        var args = materializeArguments(node, state);
+        Future<ToolExecutionResult> future = toolCallExecutor.submit(() -> toolExecutor.execute(node.getTool(), args));
+        try {
+            return future.get(timeoutNanos(budget), TimeUnit.NANOSECONDS);
+        } catch (InterruptedException | TimeoutException exception) {
+            future.cancel(true);
+            throw exception;
+        }
+    }
+
+    private Map<String, Object> analyzeEvidence(
+            Plan plan,
+            Budget budget,
+            ExecutorService toolCallExecutor,
+            Lg4jPlanExecutionState state) {
+        var params = new StateParams(state, Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE, null, budget);
+        if (budget.wallClockExhausted()) {
+            return stateSkipped(params, BUDGET_EXHAUSTED);
+        }
+        Future<Map<String, Object>> future = toolCallExecutor.submit(() -> evidenceAnalysisNode.analyze(plan, state));
+        try {
+            return future.get(timeoutNanos(budget), TimeUnit.NANOSECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            future.cancel(true);
+            return budget.wallClockExhausted()
+                    ? stateSkipped(params, BUDGET_EXHAUSTED)
+                    : stateFailed(params, errorMessage(exception));
+        } catch (TimeoutException exception) {
+            future.cancel(true);
+            return stateSkipped(params, BUDGET_EXHAUSTED);
+        } catch (ExecutionException exception) {
+            return stateFailed(params, errorMessage(exception.getCause()));
+        }
+    }
+
+    private long timeoutNanos(Budget budget) throws TimeoutException {
+        var remaining = budget.remainingWallClock();
+        if (remaining.isZero()) {
+            throw new TimeoutException(BUDGET_EXHAUSTED);
+        }
+        return remaining.toNanos();
+    }
+
+    private String errorMessage(Throwable exception) {
+        if (exception == null || exception.getMessage() == null || exception.getMessage().isBlank()) {
+            return "execution failed";
+        }
+        return exception.getMessage();
     }
 
     private boolean dependencyFailed(PlanNode node, Lg4jPlanExecutionState state) {

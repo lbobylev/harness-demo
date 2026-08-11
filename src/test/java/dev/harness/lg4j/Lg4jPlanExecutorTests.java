@@ -217,9 +217,37 @@ class Lg4jPlanExecutorTests {
         assertThat(toolExecutor.callsTo(QUERY_TEMPO)).hasSize(1);
     }
 
-    private static Lg4jPlanExecutor executor(RecordingToolExecutor toolExecutor) {
+    @Test
+    void skipsToolCallWhenWallClockBudgetExpires() {
         var tools = new Lg4jTools();
-        return new Lg4jPlanExecutor(toolExecutor, new Lg4jEvidenceAnalysisNode(tools), 4);
+        var executor = new Lg4jPlanExecutor(
+                new SlowToolExecutor(Duration.ofMillis(200)),
+                new Lg4jEvidenceAnalysisNode(tools),
+                1);
+        var plan = new Plan(List.of(node("traces", QUERY_TEMPO, literals(
+                ARG_SERVICE, "checkout-service",
+                ARG_QUERY, "catalog",
+                ARG_FROM, "14:00",
+                ARG_TO, "14:45"))));
+
+        var state = executor.execute(plan, budget(10_000, 20, Duration.ofMillis(30)));
+
+        assertThat(state.statuses())
+                .containsEntry("traces", NodeStatus.SKIPPED)
+                .containsEntry(ANALYZE_EVIDENCE, NodeStatus.SKIPPED);
+        assertThat(state.errors())
+                .containsEntry("traces", "budget exhausted")
+                .containsEntry(ANALYZE_EVIDENCE, "budget exhausted");
+        assertThat(state.result("traces")).isNull();
+    }
+
+    private static Lg4jPlanExecutor executor(RecordingToolExecutor toolExecutor) {
+        return executor(toolExecutor, 4);
+    }
+
+    private static Lg4jPlanExecutor executor(Lg4jToolExecutor toolExecutor, int maxConcurrency) {
+        var tools = new Lg4jTools();
+        return new Lg4jPlanExecutor(toolExecutor, new Lg4jEvidenceAnalysisNode(tools), maxConcurrency);
     }
 
     private static Plan fullEvidencePlan() {
@@ -277,8 +305,12 @@ class Lg4jPlanExecutorTests {
     }
 
     private static Budget budget(long maxTokens, long maxToolCalls) {
+        return budget(maxTokens, maxToolCalls, Duration.ofMinutes(1));
+    }
+
+    private static Budget budget(long maxTokens, long maxToolCalls, Duration maxWallClock) {
         return new Budget(
-                new BudgetLimits(maxTokens, maxToolCalls, Duration.ofMinutes(1), new BigDecimal("100.00")),
+                new BudgetLimits(maxTokens, maxToolCalls, maxWallClock, new BigDecimal("100.00")),
                 new ModelPricing("test-model", BigDecimal.ZERO, BigDecimal.ZERO));
     }
 
@@ -330,5 +362,25 @@ class Lg4jPlanExecutorTests {
     }
 
     private record ToolCall(String tool, Map<String, Object> args) {
+    }
+
+    private static final class SlowToolExecutor extends Lg4jToolExecutor {
+
+        private final Duration delay;
+
+        private SlowToolExecutor(Duration delay) {
+            super(new Lg4jTools());
+            this.delay = delay;
+        }
+
+        @Override
+        ToolExecutionResult execute(String name, Map<String, Object> args) {
+            try {
+                Thread.sleep(delay);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+            return super.execute(name, args);
+        }
     }
 }

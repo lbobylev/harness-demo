@@ -45,6 +45,38 @@ class BudgetTests {
     }
 
     @Test
+    void reportsRemainingWallClock() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-08-07T00:00:00Z"));
+        Budget budget = new Budget(new BudgetLimits(
+                100,
+                10,
+                Duration.ofSeconds(10),
+                new BigDecimal("1.00")
+        ), clock);
+
+        clock.advance(Duration.ofSeconds(3));
+
+        assertThat(budget.remainingWallClock()).isEqualTo(Duration.ofSeconds(7));
+        assertThat(budget.wallClockExhausted()).isFalse();
+    }
+
+    @Test
+    void remainingWallClockDoesNotGoNegative() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-08-07T00:00:00Z"));
+        Budget budget = new Budget(new BudgetLimits(
+                100,
+                10,
+                Duration.ofSeconds(10),
+                new BigDecimal("1.00")
+        ), clock);
+
+        clock.advance(Duration.ofSeconds(12));
+
+        assertThat(budget.remainingWallClock()).isZero();
+        assertThat(budget.wallClockExhausted()).isTrue();
+    }
+
+    @Test
     void pressureIncludesEstimatedCostUtilization() {
         Budget budget = new Budget(new BudgetLimits(
                 100,

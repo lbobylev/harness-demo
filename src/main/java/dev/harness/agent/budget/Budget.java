@@ -118,6 +118,15 @@ public class Budget {
         return !hasRoom();
     }
 
+    public synchronized boolean wallClockExhausted() {
+        return remainingWallClock().isZero();
+    }
+
+    public synchronized Duration remainingWallClock() {
+        var remaining = limits.maxWallClock().minus(elapsed());
+        return remaining.isNegative() ? Duration.ZERO : remaining;
+    }
+
     public synchronized boolean pressureAtOrAbove(double threshold) {
         if (Double.isNaN(threshold) || threshold < 0.0) {
             throw new IllegalArgumentException("threshold must be non-negative");

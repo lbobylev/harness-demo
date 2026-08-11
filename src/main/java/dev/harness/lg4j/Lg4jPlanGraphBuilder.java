@@ -19,7 +19,7 @@ final class Lg4jPlanGraphBuilder {
 
     static final String ANALYZE_EVIDENCE = "lg4j_analyze_evidence";
 
-    private static final String FORK = "lg4j_fork";
+    static final String FORK = "lg4j_fork";
     private static final String COMPONENT_PREFIX = "lg4j_component_";
 
     StateGraph<Lg4jPlanExecutionState> build(
