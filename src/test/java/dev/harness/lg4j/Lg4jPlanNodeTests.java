@@ -29,7 +29,7 @@ class Lg4jPlanNodeTests {
         when(planner.plan("investigate", null))
                 .thenReturn(new Lg4jPlanningResult(plan, new AiUsage("test-model", 6, 4, 10)));
 
-        var update = new Lg4jPlanNode(planner).plan(runState(budget));
+        var update = new Lg4jPlanNode(planner).plan(runState(budget), budget);
 
         assertThat(update).containsEntry(Lg4jRunState.PLAN, plan);
         assertThat((BudgetSnapshot) update.get(Lg4jRunState.BUDGET))
@@ -46,7 +46,7 @@ class Lg4jPlanNodeTests {
         when(planner.plan("investigate", null))
                 .thenReturn(new Lg4jPlanningResult(plan, new AiUsage("test-model", 8, 4, 12)));
 
-        var update = new Lg4jPlanNode(planner).plan(runState(budget));
+        var update = new Lg4jPlanNode(planner).plan(runState(budget), budget);
 
         assertThat(update)
                 .containsEntry(Lg4jRunState.PLAN, plan)
@@ -60,7 +60,6 @@ class Lg4jPlanNodeTests {
     private static Lg4jRunState runState(Budget budget) {
         return new Lg4jRunState(Map.of(
                 Lg4jRunState.GOAL, "investigate",
-                Lg4jRunState.BUDGET_RUNTIME, budget,
                 Lg4jRunState.BUDGET, budget.snapshot()));
     }
 

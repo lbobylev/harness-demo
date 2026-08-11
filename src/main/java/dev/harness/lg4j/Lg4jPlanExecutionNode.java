@@ -1,5 +1,6 @@
 package dev.harness.lg4j;
 
+import dev.harness.agent.budget.Budget;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.plan.NodeStatus;
 import dev.harness.agent.run.ErrorClass;
@@ -22,7 +23,7 @@ class Lg4jPlanExecutionNode {
         this.planExecutor = planExecutor;
     }
 
-    Map<String, Object> execute(Lg4jRunState state) {
+    Map<String, Object> execute(Lg4jRunState state, Budget budget) {
         if (state.terminal()) {
             return Map.of();
         }
@@ -32,7 +33,6 @@ class Lg4jPlanExecutionNode {
             return failure("plan must not be null");
         }
 
-        var budget = state.runtimeBudget().orElse(null);
         if (budget == null) {
             return failure("budget must be present");
         }

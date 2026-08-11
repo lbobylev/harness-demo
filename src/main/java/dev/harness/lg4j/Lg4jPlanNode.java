@@ -2,6 +2,7 @@ package dev.harness.lg4j;
 
 import dev.harness.agent.run.ErrorClass;
 import dev.harness.agent.run.RunStatus;
+import dev.harness.agent.budget.Budget;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -15,11 +16,10 @@ class Lg4jPlanNode {
         this.planner = planner;
     }
 
-    Map<String, Object> plan(Lg4jRunState state) {
+    Map<String, Object> plan(Lg4jRunState state, Budget budget) {
         if (state.terminal()) {
             return Map.of();
         }
-        var budget = state.runtimeBudget().orElse(null);
         if (budget == null) {
             return failure("budget must be present");
         }

@@ -1,6 +1,5 @@
 package dev.harness.cli;
 
-import dev.harness.agent.orchestration.AgentOrchestrator;
 import dev.harness.agent.orchestration.RunRequest;
 import dev.harness.agent.run.RunResult;
 import dev.harness.lg4j.Lg4jHarnessRunner;
@@ -16,11 +15,9 @@ public class HarnessCliRunner implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(HarnessCliRunner.class);
 
-    private final AgentOrchestrator orchestrator;
     private final Lg4jHarnessRunner lg4jRunner;
 
-    public HarnessCliRunner(AgentOrchestrator orchestrator, Lg4jHarnessRunner lg4jRunner) {
-        this.orchestrator = orchestrator;
+    public HarnessCliRunner(Lg4jHarnessRunner lg4jRunner) {
         this.lg4jRunner = lg4jRunner;
     }
 
@@ -31,32 +28,16 @@ public class HarnessCliRunner implements CommandLineRunner {
             return;
         }
 
-        String engine = "default";
-        int goalStart = 0;
-        if (args[0].startsWith("--engine=")) {
-            engine = args[0].substring("--engine=".length()).trim();
-            goalStart = 1;
-        }
-
-        if (!"default".equalsIgnoreCase(engine) && !"lg4j".equalsIgnoreCase(engine)) {
-            log.info("Unsupported engine: {}", engine);
-            logUsage();
-            return;
-        }
-        if (goalStart >= args.length) {
-            logUsage();
-            return;
-        }
-        String goal = String.join(" ", Arrays.copyOfRange(args, goalStart, args.length)).trim();
-        log.info("Running CLI goal with engine {}", engine);
+        String goal = String.join(" ", Arrays.copyOfRange(args, 0, args.length)).trim();
+        log.info("Running CLI goal with LangGraph4j engine");
         RunRequest request = new RunRequest(goal, "cli");
-        RunResult result = "lg4j".equalsIgnoreCase(engine) ? lg4jRunner.run(request) : orchestrator.run(request);
+        RunResult result = lg4jRunner.run(request);
         log.info("CLI run finished with status {}", result.status());
         logResult(result);
     }
 
     private static void logUsage() {
-        log.info("Usage: ./gradlew bootRun --args=\"[--engine=default|lg4j] <goal>\"");
+        log.info("Usage: ./gradlew bootRun --args=\"<goal>\"");
     }
 
     private static void logResult(RunResult result) {

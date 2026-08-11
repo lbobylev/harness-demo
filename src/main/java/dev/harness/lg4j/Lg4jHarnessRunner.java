@@ -1,6 +1,7 @@
 package dev.harness.lg4j;
 
 import dev.harness.agent.orchestration.RunRequest;
+import dev.harness.agent.budget.Budget;
 import dev.harness.agent.run.ErrorClass;
 import dev.harness.agent.run.RunResult;
 import dev.harness.agent.run.RunStatus;
@@ -57,7 +58,8 @@ public class Lg4jHarnessRunner {
 
     public RunResult run(RunRequest request) {
         try {
-            var finalState = graph().compile().invoke(initialState(request)).orElseThrow(
+            var budget = budgetFactory.create();
+            var finalState = graph(budget).compile().invoke(initialState(request, budget)).orElseThrow(
                     () -> new IllegalStateException("LangGraph4j run graph returned no final state"));
             return result(finalState);
         } catch (Exception exception) {
@@ -68,11 +70,11 @@ public class Lg4jHarnessRunner {
         }
     }
 
-    private StateGraph<Lg4jRunState> graph() throws GraphStateException {
+    private StateGraph<Lg4jRunState> graph(Budget budget) throws GraphStateException {
         return new StateGraph<>(Lg4jRunState.SCHEMA, Lg4jRunState::new)
-                .addNode("plan", node_async(planNode::plan))
+                .addNode("plan", node_async(state -> planNode.plan(state, budget)))
                 .addNode("validate", node_async(validateNode::validate))
-                .addNode("execute", node_async(executionNode::execute))
+                .addNode("execute", node_async(state -> executionNode.execute(state, budget)))
                 .addNode("build_report", node_async(reportNode::build))
                 .addNode("verify", node_async(verificationNode::verify))
                 .addNode("finish", node_async(finishNode::finish))
@@ -85,15 +87,13 @@ public class Lg4jHarnessRunner {
                 .addEdge("finish", END);
     }
 
-    private Map<String, Object> initialState(RunRequest request) {
-        var budget = budgetFactory.create();
+    private Map<String, Object> initialState(RunRequest request, Budget budget) {
         var state = new HashMap<String, Object>();
         state.put(Lg4jRunState.GOAL, request == null || request.goal() == null ? "" : request.goal());
         if (request != null && request.sessionId() != null) {
             state.put(Lg4jRunState.SESSION_ID, request.sessionId());
         }
         state.put(Lg4jRunState.RUN_ID, UUID.randomUUID().toString());
-        state.put(Lg4jRunState.BUDGET_RUNTIME, budget);
         state.put(Lg4jRunState.BUDGET, budget.snapshot());
         return state;
     }

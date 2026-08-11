@@ -34,8 +34,7 @@ class Lg4jPlanExecutionNodeTests {
 
         new Lg4jPlanExecutionNode(executor).execute(new Lg4jRunState(Map.of(
                 Lg4jRunState.PLAN, plan,
-                Lg4jRunState.BUDGET_RUNTIME, budget,
-                Lg4jRunState.BUDGET, budget.snapshot())));
+                Lg4jRunState.BUDGET, budget.snapshot())), budget);
 
         verify(executor).execute(same(plan), same(budget));
     }
