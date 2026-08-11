@@ -1,14 +1,14 @@
 # Spring AI Agentic Harness
 
-A Spring Boot 4 demo application that implements an agentic incident investigation harness with Spring AI 2 and OpenAI. The demo turns a natural-language incident goal into a typed execution plan, gathers structured evidence through local tools, tests a hypothesis, builds an incident report, tracks budget, verifies the result, and emits structured trace events.
+A Spring Boot 4 demo application that implements a VMAO-style agentic incident investigation harness with Spring AI 2, LangGraph4j, and OpenAI. The demo turns a natural-language incident goal into a typed agent DAG, gathers structured evidence through deterministic local agents, tests a hypothesis, builds an incident report, tracks budget, verifies the result, and emits structured trace events.
 
 ## Features
 
 - Plans work as a typed DAG and validates it before execution.
 - Applies incident-specific policy validation before execution.
 - Executes independent DAG branches as dependencies become ready, with a configurable concurrency limit.
-- Provides deterministic local tools for incident metrics, logs, traces, deployments, config changes, analysis, hypothesis testing, and final report assembly.
-- Tracks budget pressure across tokens, tool calls, wall-clock time, and estimated cost.
+- Provides deterministic local agents for incident metrics, logs, traces, deployments, config changes, analysis, hypothesis testing, and final report assembly.
+- Tracks budget pressure across tokens, agent invocations, wall-clock time, and estimated cost.
 - Emits structured trace events for planning, validation, execution, verification, recovery decisions, and run completion.
 - Returns diagnostic run results for planning, validation, execution, verification, and budget failures.
 
@@ -42,7 +42,7 @@ Key application settings:
 | `harness.replanning.max-replans` | `1` | Maximum number of replanning attempts after recoverable failures. |
 | `harness.execution.max-concurrency` | `5` | Maximum number of DAG nodes executed in parallel. |
 | `harness.budget.max-tokens` | `20000` | Token budget for a run. |
-| `harness.budget.max-tool-calls` | `50` | Tool-call budget for a run. |
+| `harness.budget.max-agent-invocations` | `50` | Agent invocation budget for a run. |
 | `harness.budget.max-wall-clock` | `60s` | Wall-clock budget for a run. |
 | `harness.budget.max-estimated-cost-usd` | `0.25` | Estimated cost budget for a run. |
 | `harness.budget.high-pressure-threshold` | `0.9` | Threshold for high budget pressure. |
@@ -82,20 +82,17 @@ src/main/java/dev/harness
 └── agent/
     ├── ai/                          # AI usage extraction
     ├── budget/                      # Budget limits, pricing, and pressure tracking
-    ├── execution/                   # DAG execution
+    ├── execution/                   # Agent response and execution errors
     ├── incident/                    # Synthetic incident data and report models
-    ├── orchestration/               # End-to-end run orchestration
     ├── plan/                        # Plan and node models
-    ├── planning/                    # Spring AI planner integration
     ├── run/                         # Run result, statuses, and recovery models
-    ├── tools/                       # Incident investigation tools and tool catalog
     ├── trace/                       # Structured trace events
-    ├── validation/                  # DAG validation
     └── verification/                # Final report verification
+└── lg4j/                            # VMAO planner, validation, execution, and agents
 ```
 
 ## Notes
 
-- Prometheus, Loki, and Tempo tools are synthetic local stubs over `IncidentData`; they do not connect to real observability backends.
+- MetricsAgent, LogsAgent, and TracesAgent are synthetic local stubs; they do not connect to real observability backends.
 - The current verifier checks that the final synthesis completed and produced a non-blank final report.
 - OpenSpec artifacts for the implementation are stored under `openspec/changes/build-spring-ai-agentic-harness/`.

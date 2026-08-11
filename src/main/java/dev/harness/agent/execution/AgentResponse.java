@@ -1,17 +1,15 @@
 package dev.harness.agent.execution;
 
-import dev.harness.agent.ai.AiUsage;
-
 public record AgentResponse(
         Object value,
-        AiUsage usage
+        AgentSpent spent
 ) {
 
     public AgentResponse {
-        usage = usage == null ? AiUsage.none() : usage;
+        spent = spent == null ? AgentSpent.none() : spent;
     }
 
     public static AgentResponse of(Object value) {
-        return new AgentResponse(value, AiUsage.none());
+        return new AgentResponse(value, AgentSpent.none());
     }
 }

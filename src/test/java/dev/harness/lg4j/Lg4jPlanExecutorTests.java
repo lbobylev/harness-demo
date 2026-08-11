@@ -3,6 +3,9 @@ package dev.harness.lg4j;
 import dev.harness.agent.budget.Budget;
 import dev.harness.agent.budget.BudgetLimits;
 import dev.harness.agent.budget.ModelPricing;
+import dev.harness.agent.ai.AiUsage;
+import dev.harness.agent.execution.AgentResponse;
+import dev.harness.agent.execution.AgentSpent;
 import dev.harness.agent.incident.LogSignature;
 import dev.harness.agent.incident.PeriodComparison;
 import dev.harness.agent.incident.TempoQueryResult;
@@ -12,7 +15,6 @@ import dev.harness.agent.plan.ArgumentValueType;
 import dev.harness.agent.plan.NodeStatus;
 import dev.harness.agent.plan.Plan;
 import dev.harness.agent.plan.PlanNode;
-import dev.harness.agent.execution.AgentResponse;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -86,6 +88,23 @@ class Lg4jPlanExecutorTests {
                 .containsEntry(ANALYZE_EVIDENCE, NodeStatus.DONE);
         assertThat(agentExecutor.callsTo(TRACES_AGENT)).hasSize(1);
         assertThat(state.result(ANALYZE_EVIDENCE)).isInstanceOf(Lg4jIncidentAnalysis.class);
+    }
+
+    @Test
+    void chargesAgentSpentToRunBudget() {
+        var agentExecutor = new SpentAgentExecutor(new AiUsage("agent-model", 7, 3, 10));
+        var executor = executor(agentExecutor);
+        var budget = budget(10_000, 20);
+        var plan = new Plan(List.of(node("traces", TRACES_AGENT, literals(
+                ARG_SERVICE, "checkout-service",
+                ARG_QUERY, "catalog",
+                ARG_FROM, "14:00",
+                ARG_TO, "14:45"))));
+
+        executor.execute(plan, budget);
+
+        assertThat(budget.snapshot().tokensUsed()).isEqualTo(10L);
+        assertThat(budget.snapshot().agentInvocationsUsed()).isEqualTo(1L);
     }
 
     @Test
@@ -388,6 +407,21 @@ class Lg4jPlanExecutorTests {
                 Thread.currentThread().interrupt();
             }
             return super.execute(name, args);
+        }
+    }
+
+    private static final class SpentAgentExecutor extends RecordingAgentExecutor {
+
+        private final AiUsage usage;
+
+        private SpentAgentExecutor(AiUsage usage) {
+            this.usage = usage;
+        }
+
+        @Override
+        AgentResponse execute(String name, Map<String, Object> args) {
+            var response = super.execute(name, args);
+            return new AgentResponse(response.value(), AgentSpent.of(usage));
         }
     }
 }

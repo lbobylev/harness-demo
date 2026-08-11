@@ -110,7 +110,7 @@ class Lg4jPlanExecutor {
             }
             acquired = true;
             var result = executeAgentInvocation(agentInvocationExecutor, budget, node, state);
-            budget.chargeUsage(result.usage());
+            budget.chargeUsage(result.spent().aiUsage());
             return stateUpdate(new StateParams(state, node.getId(), result.value(), budget), NodeStatus.DONE, null);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
