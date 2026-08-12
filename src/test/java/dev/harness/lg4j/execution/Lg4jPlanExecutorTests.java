@@ -18,9 +18,9 @@ import dev.harness.agent.plan.PlanNode;
 import dev.harness.lg4j.agents.EvidenceCorrelationAgent;
 import dev.harness.lg4j.agents.HypothesisAssessmentAgent;
 import dev.harness.lg4j.agents.Lg4jAgentExecutor;
-import dev.harness.lg4j.graph.Lg4jPlanGraphBuilder;
 import dev.harness.lg4j.incident.Lg4jIncidentAnalysis;
 import dev.harness.lg4j.nodes.Lg4jEvidenceAnalysisNode;
+import dev.harness.lg4j.state.Lg4jPlanExecutionState;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -53,7 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class Lg4jPlanExecutorTests {
 
-    private static final String ANALYZE_EVIDENCE = Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE;
+    private static final String ANALYZE_EVIDENCE = Lg4jPlanExecutionState.ANALYZE_EVIDENCE;
 
     @Test
     void doesNotExecuteMoreReadyNodesThanRemainingAgentInvocationBudget() {

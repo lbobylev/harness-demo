@@ -17,6 +17,7 @@ public final class Lg4jPlanExecutionState extends AgentState {
     public static final String STATUSES = "statuses";
     public static final String ERRORS = "errors";
     public static final String BUDGET = "budget";
+    public static final String ANALYZE_EVIDENCE = "lg4j_analyze_evidence";
 
     public static final Map<String, Channel<?>> SCHEMA = Map.of(
             RESULTS, Channels.<Map<String, Object>>base(Lg4jPlanExecutionState::merge, LinkedHashMap::new),

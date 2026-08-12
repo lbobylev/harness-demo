@@ -11,7 +11,6 @@ import dev.harness.agent.plan.Plan;
 import dev.harness.lg4j.agents.EvidenceCorrelationAgent;
 import dev.harness.lg4j.agents.HypothesisAssessmentAgent;
 import dev.harness.lg4j.graph.Lg4jPlanDag;
-import dev.harness.lg4j.graph.Lg4jPlanGraphBuilder;
 import dev.harness.lg4j.incident.Lg4jIncidentAnalysis;
 import dev.harness.lg4j.state.Lg4jPlanExecutionState;
 import org.springframework.stereotype.Component;
@@ -116,10 +115,10 @@ public class Lg4jEvidenceAnalysisNode {
     private Map<String, Object> stateUpdate(NodeStatus status, Object result, String error) {
         var update = new HashMap<String, Object>();
         update.put(Lg4jPlanExecutionState.RESULTS,
-                result == null ? Map.of() : Map.of(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE, result));
-        update.put(Lg4jPlanExecutionState.STATUSES, Map.of(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE, status));
+                result == null ? Map.of() : Map.of(Lg4jPlanExecutionState.ANALYZE_EVIDENCE, result));
+        update.put(Lg4jPlanExecutionState.STATUSES, Map.of(Lg4jPlanExecutionState.ANALYZE_EVIDENCE, status));
         update.put(Lg4jPlanExecutionState.ERRORS,
-                error == null || error.isBlank() ? Map.of() : Map.of(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE, error));
+                error == null || error.isBlank() ? Map.of() : Map.of(Lg4jPlanExecutionState.ANALYZE_EVIDENCE, error));
         return update;
     }
 }

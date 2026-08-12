@@ -6,7 +6,6 @@ import dev.harness.agent.plan.NodeStatus;
 import dev.harness.agent.run.ErrorClass;
 import dev.harness.agent.run.RunStatus;
 import dev.harness.lg4j.graph.Lg4jDebugValue;
-import dev.harness.lg4j.graph.Lg4jPlanGraphBuilder;
 import dev.harness.lg4j.incident.Lg4jIncidentAnalysis;
 import dev.harness.lg4j.state.Lg4jPlanExecutionState;
 import dev.harness.lg4j.state.Lg4jRunState;
@@ -100,7 +99,7 @@ public class Lg4jPlanExecutionNode {
     }
 
     private boolean hasFailedOrSkippedRuntimeTail(Lg4jPlanExecutionState executionState) {
-        return isFailedOrSkipped(executionState, Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE);
+        return isFailedOrSkipped(executionState, Lg4jPlanExecutionState.ANALYZE_EVIDENCE);
     }
 
     private boolean isFailedOrSkipped(Lg4jPlanExecutionState executionState, String nodeId) {
@@ -109,7 +108,7 @@ public class Lg4jPlanExecutionNode {
     }
 
     private Lg4jIncidentAnalysis finalAnalysis(Lg4jPlanExecutionState executionState) {
-        var result = executionState.result(Lg4jPlanGraphBuilder.ANALYZE_EVIDENCE);
+        var result = executionState.result(Lg4jPlanExecutionState.ANALYZE_EVIDENCE);
         if (result instanceof Lg4jIncidentAnalysis analysis) {
             return analysis;
         }
