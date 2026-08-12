@@ -51,6 +51,5 @@ public class HarnessCliRunner implements CommandLineRunner {
         if (result.budget() != null) {
             log.info("Budget pressure: %.3f".formatted(result.budget().pressure()));
         }
-        log.info("Trace events: {}", result.traceEvents().size());
     }
 }

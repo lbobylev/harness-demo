@@ -9,11 +9,11 @@ import dev.harness.lg4j.execution.Lg4jBudgetFactory;
 import dev.harness.lg4j.execution.Lg4jPlanExecutionNode;
 import dev.harness.lg4j.graph.Lg4jDebugValue;
 import dev.harness.lg4j.nodes.Lg4jFinishNode;
+import dev.harness.lg4j.planning.Lg4jPlanNode;
 import dev.harness.lg4j.nodes.Lg4jPlanValidationNode;
 import dev.harness.lg4j.nodes.Lg4jReplanDecisionNode;
 import dev.harness.lg4j.nodes.Lg4jReportNode;
 import dev.harness.lg4j.nodes.Lg4jVerificationNode;
-import dev.harness.lg4j.planning.Lg4jPlanNode;
 import dev.harness.lg4j.state.Lg4jRunState;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -81,7 +80,7 @@ public class Lg4jHarnessRunner {
             log.warn("LangGraph4j run failed: {}", Lg4jDebugValue.dump(exception), exception);
             return new RunResult(UUID.randomUUID().toString(), request == null ? null : request.sessionId(),
                     RunStatus.FAILED_EXECUTION, null, Lg4jDebugValue.dump(exception), ErrorClass.FATAL,
-                    null, null, List.of(), null);
+                    null, null, null);
         }
     }
 
@@ -127,7 +126,6 @@ public class Lg4jHarnessRunner {
                 state.errorClass().orElse(ErrorClass.FATAL),
                 state.verdict().orElse(null),
                 state.plan().orElse(null),
-                List.of(),
                 state.budget().orElse(null)
         );
     }
